@@ -58,7 +58,7 @@ export const Hero: React.FC = () => {
         {/* Call To Action Buttons */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 sm:gap-4 mb-8">
           <a
-            href={ACADEMY_INFO.googleForms.admissionApplication}
+            href={ACADEMY_INFO.googleForms.demoBooking}
             target="_blank"
             rel="noopener noreferrer"
             className="w-full sm:w-auto"
@@ -67,14 +67,14 @@ export const Hero: React.FC = () => {
               variant="gold"
               size="lg"
               fullWidth
-              icon={<GraduationCap className="w-5 h-5 text-navy-dark" />}
+              icon={<Sparkles className="w-5 h-5 text-navy-dark" />}
               className="shadow-xl shadow-gold-accent/20 px-8 py-4 text-base font-bold"
             >
-              Apply for Admission
+              Book a FREE Demo
             </Button>
           </a>
           <a
-            href={ACADEMY_INFO.googleForms.demoBooking}
+            href={ACADEMY_INFO.googleForms.admissionApplication}
             target="_blank"
             rel="noopener noreferrer"
             className="w-full sm:w-auto"
@@ -83,10 +83,10 @@ export const Hero: React.FC = () => {
               variant="outline"
               size="lg"
               fullWidth
-              icon={<Sparkles className="w-5 h-5" />}
+              icon={<GraduationCap className="w-5 h-5" />}
               className="px-8 py-4 text-base font-bold border-2 border-navy-primary text-navy-primary hover:bg-navy-primary hover:text-white"
             >
-              Book a FREE Demo
+              Apply for Admission
             </Button>
           </a>
         </div>

@@ -105,12 +105,12 @@ export const Navbar: React.FC = () => {
           {/* Mobile Hamburger Button */}
           <div className="lg:hidden flex items-center gap-2">
             <a
-              href={ACADEMY_INFO.googleForms.admissionApplication}
+              href={ACADEMY_INFO.googleForms.demoBooking}
               target="_blank"
               rel="noopener noreferrer"
             >
               <Button variant="gold" size="sm" className="text-xs px-3 py-1.5 font-bold">
-                Apply for Admission
+                FREE Demo
               </Button>
             </a>
             <button
@@ -141,7 +141,7 @@ export const Navbar: React.FC = () => {
           </div>
           <div className="flex flex-col gap-3 pt-4 border-t border-slate-100">
             <a
-              href={ACADEMY_INFO.googleForms.admissionApplication}
+              href={ACADEMY_INFO.googleForms.demoBooking}
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => setMobileMenuOpen(false)}
@@ -151,19 +151,24 @@ export const Navbar: React.FC = () => {
                 fullWidth
                 size="md"
                 className="font-bold shadow-md"
-                icon={<ArrowRight className="w-4 h-4" />}
+                icon={<Sparkles className="w-4 h-4 text-navy-dark" />}
               >
-                Apply for Admission
+                Book a FREE Demo Class
               </Button>
             </a>
             <a
-              href={ACADEMY_INFO.googleForms.demoBooking}
+              href={ACADEMY_INFO.googleForms.admissionApplication}
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => setMobileMenuOpen(false)}
             >
-              <Button variant="outline" fullWidth size="md" icon={<Sparkles className="w-4 h-4" />}>
-                Book a FREE Demo Class
+              <Button
+                variant="outline"
+                fullWidth
+                size="md"
+                icon={<ArrowRight className="w-4 h-4" />}
+              >
+                Apply for Admission
               </Button>
             </a>
             <a
