@@ -14,7 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://afterbells.in"),
+  metadataBase: new URL("https://www.afterbells.in"),
+  applicationName: "After Bells Academy",
   title: {
     default: "After Bells Academy | Live Online Classes for KG to Grade 12",
     template: "%s | After Bells Academy",
@@ -22,11 +23,18 @@ export const metadata: Metadata = {
   description:
     "Curiosity Begins After the Last Bell. After Bells Academy is a modern online learning platform providing live interactive classes for KG to Grade 12 students across State Syllabus, CBSE, ICSE, GCSE, and IGCSE in India, UK, and GCC countries.",
   keywords: [
-    "After Bells",
     "After Bells Academy",
+    "after bells academy",
+    "After Bells",
+    "after bells",
+    "AfterBells Academy",
+    "afterbells academy",
     "afterbells.in",
     "afterbells",
     "AfterBells",
+    "after bells online tuition",
+    "after bells academy online learning",
+    "after bells tuition classes",
     "online tuition KG to Grade 12",
     "live online classes India",
     "online tuition UK",
@@ -51,17 +59,17 @@ export const metadata: Metadata = {
     telephone: false,
   },
   alternates: {
-    canonical: "https://afterbells.in",
+    canonical: "https://www.afterbells.in",
   },
   openGraph: {
     title: "After Bells Academy | Live Online Classes for KG to Grade 12",
     description:
       "Curiosity Begins After the Last Bell. Live interactive online tuition classes for KG to Grade 12 across State Syllabus, CBSE, ICSE, GCSE, and IGCSE curriculums in India, UK, and GCC countries.",
-    url: "https://afterbells.in",
+    url: "https://www.afterbells.in",
     siteName: "After Bells Academy",
     images: [
       {
-        url: "https://afterbells.in/logo.png",
+        url: "https://www.afterbells.in/logo.png",
         width: 1200,
         height: 630,
         alt: "After Bells Academy Official Logo",
@@ -75,7 +83,7 @@ export const metadata: Metadata = {
     title: "After Bells Academy | Live Online Classes for KG to Grade 12",
     description:
       "Curiosity Begins After the Last Bell. Live interactive online tuition classes for students in India, UK, and GCC countries.",
-    images: ["https://afterbells.in/logo.png"],
+    images: ["https://www.afterbells.in/logo.png"],
   },
   robots: {
     index: true,
@@ -109,12 +117,18 @@ export default function RootLayout({
     "@graph": [
       {
         "@type": "EducationalOrganization",
-        "@id": "https://afterbells.in/#organization",
+        "@id": "https://www.afterbells.in/#organization",
         name: "After Bells Academy",
-        alternateName: ["After Bells", "AfterBells", "afterbells.in"],
-        url: "https://afterbells.in",
-        logo: "https://afterbells.in/logo.png",
-        image: "https://afterbells.in/logo.png",
+        alternateName: [
+          "After Bells",
+          "AfterBells",
+          "AfterBells Academy",
+          "after bells academy",
+          "afterbells.in",
+        ],
+        url: "https://www.afterbells.in",
+        logo: "https://www.afterbells.in/logo.png",
+        image: "https://www.afterbells.in/logo.png",
         description:
           "After Bells Academy is a modern online learning platform providing live interactive classes for students from KG to Grade 12.",
         telephone: "+91 96564 27537",
@@ -127,12 +141,12 @@ export default function RootLayout({
       },
       {
         "@type": "WebSite",
-        "@id": "https://afterbells.in/#website",
-        url: "https://afterbells.in",
+        "@id": "https://www.afterbells.in/#website",
+        url: "https://www.afterbells.in",
         name: "After Bells Academy",
-        alternateName: "After Bells",
+        alternateName: ["After Bells", "AfterBells Academy", "after bells academy"],
         publisher: {
-          "@id": "https://afterbells.in/#organization",
+          "@id": "https://www.afterbells.in/#organization",
         },
       },
     ],

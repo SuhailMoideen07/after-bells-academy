@@ -7,6 +7,6 @@ export default function robots(): MetadataRoute.Robots {
       allow: "/",
       disallow: ["/private/"],
     },
-    sitemap: "https://afterbells.in/sitemap.xml",
+    sitemap: "https://www.afterbells.in/sitemap.xml",
   };
 }

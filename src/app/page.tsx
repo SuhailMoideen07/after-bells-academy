@@ -18,6 +18,13 @@ export const metadata = {
     "Curiosity Begins After the Last Bell. After Bells Academy provides live interactive classes for KG to Grade 12 students across State Syllabus, CBSE, ICSE, GCSE, and IGCSE curriculums in India, UK, and GCC countries.",
   keywords: [
     "After Bells Academy",
+    "after bells academy",
+    "After Bells",
+    "after bells",
+    "AfterBells Academy",
+    "afterbells.in",
+    "afterbells",
+    "after bells online tuition",
     "Live Online Classes",
     "State Syllabus Tuition",
     "CBSE Online Tuition",
