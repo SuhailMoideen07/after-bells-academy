@@ -35,7 +35,7 @@ export const Hero: React.FC = () => {
 
         {/* Subtitle */}
         <p className="text-base sm:text-lg lg:text-xl text-slate-600 leading-relaxed max-w-3xl mx-auto mb-8 font-normal">
-          After Bells Academy is a modern online learning platform providing live interactive classes for students from <strong>KG to Grade 12</strong>. We make quality education accessible through personalized teaching, engaging live sessions, and concept-based learning.
+          <strong>After Bells</strong> (After Bells Academy) is a modern online learning platform providing live interactive classes for students from <strong>KG to Grade 12</strong>. We make quality education accessible through personalized teaching, engaging live sessions, and concept-based learning.
         </p>
 
         {/* Core Services Highlights Box */}

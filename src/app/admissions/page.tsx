@@ -18,9 +18,9 @@ import {
 } from "lucide-react";
 
 export const metadata = {
-  title: "Book a FREE Demo & Admissions | After Bells Academy",
+  title: "Book a FREE Demo & Admissions | After Bells (After Bells Academy)",
   description:
-    "Book a FREE demo class or apply for online admission at After Bells Academy for live interactive classes (KG to Grade 12).",
+    "Book a FREE demo class or apply for online admission at After Bells (After Bells Academy) for live interactive classes (KG to Grade 12).",
 };
 
 export default function AdmissionsPage() {

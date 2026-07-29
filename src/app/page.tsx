@@ -13,17 +13,16 @@ import { CTASection } from "@/components/sections/CTASection";
 import { Footer } from "@/components/layout/Footer";
 
 export const metadata = {
-  title: "After Bells Academy | Live Online Classes for KG to Grade 12",
+  title: "After Bells | Live Online Classes for KG to Grade 12 (After Bells Academy)",
   description:
-    "Curiosity Begins After the Last Bell. After Bells Academy provides live interactive classes for KG to Grade 12 students across State Syllabus, CBSE, ICSE, GCSE, and IGCSE curriculums in India, UK, and GCC countries.",
+    "Curiosity Begins After the Last Bell. After Bells (After Bells Academy) provides live interactive classes for KG to Grade 12 students across State Syllabus, CBSE, ICSE, GCSE, and IGCSE curriculums in India, UK, and GCC countries.",
   keywords: [
-    "After Bells Academy",
-    "after bells academy",
     "After Bells",
     "after bells",
-    "AfterBells Academy",
+    "After Bells Academy",
+    "after bells academy",
+    "AfterBells",
     "afterbells.in",
-    "afterbells",
     "after bells online tuition",
     "Live Online Classes",
     "State Syllabus Tuition",
