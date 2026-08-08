@@ -5,7 +5,7 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: "*",
       allow: "/",
-      disallow: ["/private/"],
+      disallow: ["/admin/", "/teacher/", "/api/", "/login/", "/private/"],
     },
     sitemap: "https://www.afterbells.in/sitemap.xml",
   };

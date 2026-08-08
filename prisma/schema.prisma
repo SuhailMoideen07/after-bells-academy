@@ -1,0 +1,173 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  admin
+  teacher
+}
+
+enum Status {
+  active
+  disabled
+}
+
+enum ScheduleStatus {
+  scheduled
+  in_progress
+  completed
+  cancelled
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  role      Role     @default(teacher)
+  status    Status   @default(active)
+  createdAt DateTime @default(now()) @map("created_at")
+  teacher   Teacher?
+
+  @@map("users")
+}
+
+model Teacher {
+  id                   String     @id @default(cuid())
+  userId               String     @unique @map("user_id")
+  user                 User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email                String     @unique
+  name                 String
+  phone                String
+  avatarUrl            String?    @map("avatar_url")
+  bio                  String?    @default("")
+  subjects             String[]
+  assignedStudentCount Int        @default(0) @map("assigned_student_count")
+  status               Status     @default(active)
+  createdAt            DateTime   @default(now()) @map("created_at")
+  students             Student[]
+  schedules            Schedule[]
+  classLogs            ClassLog[]
+
+  @@map("teachers")
+}
+
+model Student {
+  id                String   @id @default(cuid())
+  name              String
+  gradeClass        String   @map("grade_class")
+  board             String
+  guardianName      String   @map("guardian_name")
+  phone             String
+  assignedTeacherId String?  @map("assigned_teacher_id")
+  teacher           Teacher? @relation(fields: [assignedTeacherId], references: [id], onDelete: SetNull)
+  subjects          String[]
+  status            Status   @default(active)
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@map("students")
+}
+
+model Subject {
+  id   String @id @default(cuid())
+  name String
+  code String @unique
+
+  @@map("subjects")
+}
+
+model Batch {
+  id           String   @id @default(cuid())
+  name         String
+  subjectName  String?  @default("") @map("subject_name")
+  gradeClass   String?  @default("") @map("grade_class")
+  studentIds   String[] @map("student_ids")
+  studentNames String[] @map("student_names")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("batches")
+}
+
+model Schedule {
+  id            String         @id @default(cuid())
+  teacherId     String         @map("teacher_id")
+  teacher       Teacher        @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  studentId     String         @map("student_id")
+  studentName   String?        @map("student_name")
+  studentNames  String[]       @map("student_names")
+  isBatch       Boolean        @default(false) @map("is_batch")
+  batchName     String?        @map("batch_name")
+  subjectName   String         @map("subject_name")
+  gradeClass    String         @map("grade_class")
+  dayOfWeek     String         @map("day_of_week")
+  startTime     String         @map("start_time")
+  endTime       String         @map("end_time")
+  date          String
+  status        ScheduleStatus @default(scheduled)
+  isRescheduled Boolean        @default(false) @map("is_rescheduled")
+  rescheduledAt DateTime?      @map("rescheduled_at")
+  classLogs     ClassLog[]
+
+  @@map("schedules")
+}
+
+model ClassLog {
+  id              String    @id @default(cuid())
+  scheduleId      String?   @map("schedule_id")
+  schedule        Schedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  teacherId       String    @map("teacher_id")
+  teacher         Teacher   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  teacherName     String    @map("teacher_name")
+  studentId       String    @map("student_id")
+  studentName     String    @map("student_name")
+  studentNames    String[]  @map("student_names")
+  isBatch         Boolean   @default(false) @map("is_batch")
+  batchName       String?   @map("batch_name")
+  subjectName     String    @map("subject_name")
+  gradeClass      String    @map("grade_class")
+  date            String
+  startTime       String    @map("start_time")
+  endTime         String    @map("end_time")
+  durationMinutes Int       @default(60) @map("duration_minutes")
+  status          String    // completed | cancelled
+  remarks         String?
+  cancelledReason String?   @map("cancelled_reason")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@map("class_logs")
+}
+
+model NotificationItem {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  title      String
+  message    String
+  type       String   // reminder | schedule_change | system
+  readStatus Boolean  @default(false) @map("read_status")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("notifications")
+}
+
+model UserPassword {
+  userId    String   @id @map("user_id")
+  hash      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("user_passwords")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  email     String
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("password_reset_tokens")
+}
