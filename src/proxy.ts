@@ -9,7 +9,7 @@ const JWT_SECRET = new TextEncoder().encode(
 
 const COOKIE_NAME = 'aba_session_token';
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get(COOKIE_NAME)?.value;
 
@@ -67,6 +67,9 @@ export async function middleware(request: NextRequest) {
 
   return NextResponse.next();
 }
+
+// Support both proxy export and middleware fallback for Next.js 16
+export const middleware = proxy;
 
 export const config = {
   matcher: ['/admin/:path*', '/teacher/:path*', '/login', '/api/admin/:path*', '/api/teacher/:path*', '/api/auth/:path*'],
