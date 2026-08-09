@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     const updatedSchedule = await db.updateSchedule(schedule.id, {
       start_time: currentTimeStr,
       status: 'in_progress',
-    });
+    }, { isAdminReschedule: false });
 
     return NextResponse.json({
       success: true,

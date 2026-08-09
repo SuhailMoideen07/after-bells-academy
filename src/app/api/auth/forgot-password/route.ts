@@ -23,6 +23,14 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // Password reset tokens require database — if only JSON fallback, return gracefully
+    if (!process.env.DATABASE_URL || process.env.DATABASE_URL.trim() === '') {
+      console.log('[forgot-password] Database not configured — password reset unavailable');
+      return NextResponse.json({
+        message: 'If an account exists with this email address, a password reset link has been sent.',
+      });
+    }
+
     // Generate random 64-char crypto token
     const resetToken = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 60 minutes

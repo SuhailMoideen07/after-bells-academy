@@ -41,9 +41,10 @@ export async function GET(request: Request) {
       });
 
       if (format === 'csv') {
+        const escapeCsv = (val: string | number) => `"${String(val).replace(/"/g, '""')}"`;
         const headers = ['Teacher Name', 'Email', 'Total Classes', 'Completed', 'Cancelled', 'Total Hours'];
         const rows = breakdown.map(b => [b.name, b.email, b.totalClasses, b.completedClasses, b.cancelledClasses, b.totalHours]);
-        const csvContent = [headers.join(','), ...rows.map(r => r.map(cell => `"${cell}"`).join(','))].join('\n');
+        const csvContent = [headers.map(escapeCsv).join(','), ...rows.map(r => r.map(escapeCsv).join(','))].join('\n');
 
         return new Response(csvContent, {
           headers: {
@@ -78,9 +79,10 @@ export async function GET(request: Request) {
       });
 
       if (format === 'csv') {
+        const escapeCsv = (val: string | number | undefined) => `"${String(val ?? '').replace(/"/g, '""')}"`;
         const headers = ['Student Name', 'Grade', 'Board', 'Teacher', 'Total Classes', 'Completed', 'Cancelled', 'Total Hours'];
         const rows = breakdown.map(b => [b.name, b.grade, b.board, b.teacher, b.totalClasses, b.completedClasses, b.cancelledClasses, b.totalHours]);
-        const csvContent = [headers.join(','), ...rows.map(r => r.map(cell => `"${cell}"`).join(','))].join('\n');
+        const csvContent = [headers.map(escapeCsv).join(','), ...rows.map(r => r.map(escapeCsv).join(','))].join('\n');
 
         return new Response(csvContent, {
           headers: {

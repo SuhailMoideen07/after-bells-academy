@@ -31,8 +31,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Class session is already finalized' }, { status: 400 });
     }
 
-    schedule.status = 'cancelled';
-    await db.updateScheduleStatus(schedule.id, 'cancelled');
+    // Persist cancellation to database
+    const updatedSchedule = await db.updateSchedule(schedule.id, {
+      status: 'cancelled',
+    }, { isAdminReschedule: false });
 
     const teacherObj = await db.getTeacherById(schedule.teacher_id);
     const studentObj = await db.getStudentById(schedule.student_id);
@@ -61,7 +63,7 @@ export async function POST(request: Request) {
       success: true,
       message: 'Class cancelled and logged successfully',
       log: newLog,
-      schedule,
+      schedule: updatedSchedule || schedule,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Server error' }, { status: 500 });

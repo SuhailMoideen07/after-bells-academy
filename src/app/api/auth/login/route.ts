@@ -11,19 +11,14 @@ const MAX_ATTEMPTS = 5;           // Max failed attempts before lockout
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15-minute lockout
 const CLEANUP_INTERVAL_MS = 30 * 60 * 1000; // Clean stale entries every 30 min
 
-// Periodically clean up old entries to prevent memory leak
-if (typeof globalThis !== 'undefined') {
-  const globalForRate = globalThis as unknown as { _loginRateCleanup?: boolean };
-  if (!globalForRate._loginRateCleanup) {
-    globalForRate._loginRateCleanup = true;
-    setInterval(() => {
-      const now = Date.now();
-      for (const [key, val] of loginAttempts.entries()) {
-        if (now - val.lastAttempt > LOCKOUT_DURATION_MS) {
-          loginAttempts.delete(key);
-        }
-      }
-    }, CLEANUP_INTERVAL_MS);
+// Lazy cleanup: purge stale entries on demand instead of using setInterval
+// (setInterval doesn't persist across serverless invocations and leaks on HMR)
+function cleanupStaleEntries() {
+  const now = Date.now();
+  for (const [key, val] of loginAttempts.entries()) {
+    if (now - val.lastAttempt > LOCKOUT_DURATION_MS) {
+      loginAttempts.delete(key);
+    }
   }
 }
 
@@ -71,6 +66,7 @@ function clearAttempts(ip: string) {
 
 export async function POST(request: Request) {
   try {
+    cleanupStaleEntries();
     const ip = getClientIP(request);
 
     // Check rate limit before processing

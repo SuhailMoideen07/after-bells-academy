@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import bcrypt from 'bcryptjs';
 import { db } from '@/lib/db';
 import { prisma } from '@/lib/prisma';
 
@@ -28,6 +27,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Password reset requires database for token storage
+    if (!process.env.DATABASE_URL || process.env.DATABASE_URL.trim() === '') {
+      return NextResponse.json({ error: 'Password reset is not available without database.' }, { status: 503 });
+    }
+
     // Find token in DB
     const resetRecord = await prisma.passwordResetToken.findUnique({
       where: { token },
@@ -48,19 +52,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'User account not found.' }, { status: 404 });
     }
 
-    // Hash new password with 10-round bcrypt
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(newPassword, salt);
+    // Update password via db abstraction (uses bcrypt internally)
+    await db.resetUserPassword(user.id, newPassword);
 
-    // Save hash & delete token
-    await prisma.$transaction([
-      prisma.userPassword.upsert({
-        where: { userId: user.id },
-        create: { userId: user.id, hash: passwordHash },
-        update: { hash: passwordHash },
-      }),
-      prisma.passwordResetToken.delete({ where: { id: resetRecord.id } }),
-    ]);
+    // Clean up the used reset token
+    await prisma.passwordResetToken.delete({ where: { id: resetRecord.id } }).catch(() => {});
 
     return NextResponse.json({
       message: 'Your password has been successfully updated! You can now log in with your new password.',

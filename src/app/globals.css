@@ -135,3 +135,11 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #183D7A;
 }
+
+.bg-gold-hover {
+  background-color: #C59F28;
+}
+
+.hover\:bg-gold-hover:hover {
+  background-color: #C59F28;
+}

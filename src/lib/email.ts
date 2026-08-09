@@ -29,6 +29,11 @@ export async function sendPasswordResetEmail(params: {
   const { toEmail, userName, resetLink } = params;
   const transporter = getTransporter();
 
+  // Escape HTML special characters to prevent injection in email content
+  function escapeHtml(str: string): string {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
   // HTML Email Template
   const htmlContent = `
     <!DOCTYPE html>
@@ -53,7 +58,7 @@ export async function sendPasswordResetEmail(params: {
             <span class="badge">After Bells Academy</span>
             <h2>Password Reset Request</h2>
           </div>
-          <p>Hello <strong>${userName}</strong>,</p>
+          <p>Hello <strong>${escapeHtml(userName)}</strong>,</p>
           <p>We received a request to reset the password for your After Bells Academy account (<strong>${toEmail}</strong>). Click the gold button below to set a new password:</p>
           <div class="btn-wrapper">
             <a href="${resetLink}" class="btn" target="_blank">Reset Password Now →</a>

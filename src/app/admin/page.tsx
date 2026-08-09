@@ -43,9 +43,11 @@ export default function AdminOverviewPage() {
   const [recentLogs, setRecentLogs] = useState<ClassLog[]>([]);
 
   useEffect(() => {
+    const abortController = new AbortController();
+
     async function loadData() {
       try {
-        const res = await fetch('/api/admin/analytics');
+        const res = await fetch('/api/admin/analytics', { signal: abortController.signal });
         if (res.ok) {
           const data = await res.json();
           setAnalytics(data.analytics);
@@ -55,6 +57,7 @@ export default function AdminOverviewPage() {
           setRecentLogs(data.recentLogs || []);
         }
       } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
         console.error(err);
       } finally {
         setLoading(false);
@@ -62,8 +65,11 @@ export default function AdminOverviewPage() {
     }
 
     loadData();
-    const interval = setInterval(loadData, 3000); // Live update every 3s
-    return () => clearInterval(interval);
+    const interval = setInterval(loadData, 30000); // Refresh every 30s
+    return () => {
+      clearInterval(interval);
+      abortController.abort();
+    };
   }, []);
 
   if (loading) {

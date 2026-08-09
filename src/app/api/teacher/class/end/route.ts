@@ -55,10 +55,11 @@ export async function POST(request: Request) {
       }
     }
 
-    // Update schedule
-    schedule.end_time = endTimeStr;
-    schedule.status = 'completed';
-    await db.updateScheduleStatus(schedule.id, 'completed');
+    // Update schedule — persist end_time and status to database
+    const finalSchedule = await db.updateSchedule(schedule.id, {
+      end_time: endTimeStr,
+      status: 'completed',
+    }, { isAdminReschedule: false });
 
     // Create immutable class log
     const teacherObj = await db.getTeacherById(schedule.teacher_id);
@@ -87,7 +88,7 @@ export async function POST(request: Request) {
       success: true,
       message: 'Class ended and logged successfully',
       log: newLog,
-      schedule,
+      schedule: finalSchedule || schedule,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Server error' }, { status: 500 });

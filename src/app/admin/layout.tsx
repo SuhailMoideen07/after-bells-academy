@@ -15,7 +15,6 @@ import {
   ShieldCheck,
   Menu,
   X,
-  Sparkles,
 } from 'lucide-react';
 
 const ADMIN_NAV = [

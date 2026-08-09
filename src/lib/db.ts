@@ -408,19 +408,22 @@ class JsonDatabaseManager {
     return sch;
   }
 
-  public updateSchedule = (id: string, updates: Partial<Schedule>): Schedule | undefined => {
+  public updateSchedule = (id: string, updates: Partial<Schedule>, options?: { isAdminReschedule?: boolean }): Schedule | undefined => {
     const sch = this.getScheduleById(id);
     if (!sch) return undefined;
+    const isReschedule = options?.isAdminReschedule !== false;
     const teacher_id = updates.teacher_id || sch.teacher_id;
     const teacher = this.getTeacherById(teacher_id);
     const teacherName = teacher?.name || updates.teacher_name || sch.teacher_name;
     Object.assign(sch, updates, {
       teacher_id,
       teacher_name: teacherName,
-      is_rescheduled: true,
-      rescheduled_at: new Date().toISOString(),
+      ...(isReschedule && {
+        is_rescheduled: true,
+        rescheduled_at: new Date().toISOString(),
+      }),
     });
-    if (teacher && teacher.user_id) {
+    if (isReschedule && teacher && teacher.user_id) {
       if (!this.data.notifications) this.data.notifications = [];
       const notifId = 'notif_' + Date.now();
       const targetName = sch.batch_name || sch.student_name || 'Student';
@@ -723,8 +726,11 @@ export const db = {
     if (!teacher) return false;
 
     await prisma.$transaction([
+      prisma.classLog.deleteMany({ where: { teacherId: id } }),
       prisma.schedule.deleteMany({ where: { teacherId: id } }),
+      prisma.notificationItem.deleteMany({ where: { userId: teacher.userId } }),
       prisma.student.updateMany({ where: { assignedTeacherId: id }, data: { assignedTeacherId: null } }),
+      prisma.userPassword.deleteMany({ where: { userId: teacher.userId } }),
       prisma.teacher.delete({ where: { id } }),
       prisma.user.delete({ where: { id: teacher.userId } }),
     ]);
@@ -875,6 +881,18 @@ export const db = {
       await prisma.teacher.update({ where: { id: current.assignedTeacherId }, data: { assignedStudentCount: { decrement: 1 } } }).catch(() => {});
     }
 
+    // Clean up batch membership
+    const batches = await prisma.batch.findMany({ where: { studentIds: { has: id } } });
+    for (const batch of batches) {
+      await prisma.batch.update({
+        where: { id: batch.id },
+        data: {
+          studentIds: batch.studentIds.filter(sId => sId !== id),
+          studentNames: batch.studentNames.filter(sName => sName !== current.name),
+        },
+      });
+    }
+
     await prisma.student.delete({ where: { id } });
     return true;
   },
@@ -942,7 +960,7 @@ export const db = {
     return list.map(s => ({
       id: s.id,
       teacher_id: s.teacherId,
-      teacher_name: s.teacher ? s.teacher.name : s.studentName || 'Teacher',
+      teacher_name: s.teacher ? s.teacher.name : 'Unknown Teacher',
       student_id: s.studentId,
       student_name: s.studentName || undefined,
       student_names: s.studentNames,
@@ -1094,10 +1112,11 @@ export const db = {
     };
   },
 
-  async updateSchedule(id: string, updates: Partial<Schedule>): Promise<Schedule | undefined> {
-    if (!isPrismaEnabled()) return jsonDb.updateSchedule(id, updates);
+  async updateSchedule(id: string, updates: Partial<Schedule>, options?: { isAdminReschedule?: boolean }): Promise<Schedule | undefined> {
+    if (!isPrismaEnabled()) return jsonDb.updateSchedule(id, updates, options);
     const sch = await this.getScheduleById(id);
     if (!sch) return undefined;
+    const isReschedule = options?.isAdminReschedule !== false;
 
     const teacherId = updates.teacher_id || sch.teacher_id;
     const teacher = await prisma.teacher.findUnique({ where: { id: teacherId } });
@@ -1115,12 +1134,11 @@ export const db = {
                   updates.status === 'completed' ? ScheduleStatus.completed :
                   updates.status === 'cancelled' ? ScheduleStatus.cancelled : ScheduleStatus.scheduled
         }),
-        isRescheduled: true,
-        rescheduledAt: new Date(),
+        ...(isReschedule && { isRescheduled: true, rescheduledAt: new Date() }),
       },
     });
 
-    if (teacher && teacher.userId) {
+    if (isReschedule && teacher && teacher.userId) {
       const targetName = s.batchName || s.studentName || 'Student';
       await prisma.notificationItem.create({
         data: {
@@ -1137,7 +1155,7 @@ export const db = {
     return {
       id: s.id,
       teacher_id: s.teacherId,
-      teacher_name: teacher ? teacher.name : s.studentName || 'Teacher',
+      teacher_name: teacher ? teacher.name : 'Unknown Teacher',
       student_id: s.studentId,
       student_name: s.studentName || undefined,
       student_names: s.studentNames,
