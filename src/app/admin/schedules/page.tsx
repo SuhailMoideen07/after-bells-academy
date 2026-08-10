@@ -732,34 +732,70 @@ export default function SchedulesManagementPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">Start Time (12-Hr)</label>
-                  <select
-                    value={startTime}
-                    onChange={e => handleStartTimeSelect(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
-                    required
-                  >
-                    {TIME_SLOTS_12HR.map(slot => (
-                      <option key={slot.value24} value={slot.value24}>
-                        {slot.label12}
-                      </option>
-                    ))}
-                  </select>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">Start Time</label>
+                  <div className="space-y-1.5">
+                    <select
+                      value={TIME_SLOTS_12HR.some(slot => slot.value24 === startTime) ? startTime : 'custom'}
+                      onChange={e => {
+                        if (e.target.value !== 'custom') {
+                          handleStartTimeSelect(e.target.value);
+                        }
+                      }}
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
+                    >
+                      {!TIME_SLOTS_12HR.some(slot => slot.value24 === startTime) && (
+                        <option value="custom">Custom Time ({formatTime12Hr(startTime)})</option>
+                      )}
+                      {TIME_SLOTS_12HR.map(slot => (
+                        <option key={slot.value24} value={slot.value24}>
+                          {slot.label12}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-slate-500 font-bold uppercase whitespace-nowrap">Or type time:</span>
+                      <input
+                        type="time"
+                        value={startTime}
+                        onChange={e => handleStartTimeSelect(e.target.value)}
+                        className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
+                        required
+                      />
+                    </div>
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">End Time (12-Hr)</label>
-                  <select
-                    value={endTime}
-                    onChange={e => setEndTime(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
-                    required
-                  >
-                    {TIME_SLOTS_12HR.map(slot => (
-                      <option key={slot.value24} value={slot.value24}>
-                        {slot.label12}
-                      </option>
-                    ))}
-                  </select>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">End Time</label>
+                  <div className="space-y-1.5">
+                    <select
+                      value={TIME_SLOTS_12HR.some(slot => slot.value24 === endTime) ? endTime : 'custom'}
+                      onChange={e => {
+                        if (e.target.value !== 'custom') {
+                          setEndTime(e.target.value);
+                        }
+                      }}
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
+                    >
+                      {!TIME_SLOTS_12HR.some(slot => slot.value24 === endTime) && (
+                        <option value="custom">Custom Time ({formatTime12Hr(endTime)})</option>
+                      )}
+                      {TIME_SLOTS_12HR.map(slot => (
+                        <option key={slot.value24} value={slot.value24}>
+                          {slot.label12}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-slate-500 font-bold uppercase whitespace-nowrap">Or type time:</span>
+                      <input
+                        type="time"
+                        value={endTime}
+                        onChange={e => setEndTime(e.target.value)}
+                        className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
+                        required
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
               {isTimeInverted ? (

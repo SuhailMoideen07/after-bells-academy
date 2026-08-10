@@ -20,6 +20,17 @@ export default function StudentManagementPage() {
   const [assignedTeacherId, setAssignedTeacherId] = useState('');
   const [subjectsStr, setSubjectsStr] = useState('Mathematics, Physics');
 
+  // Edit modal state
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editGradeClass, setEditGradeClass] = useState('Grade 10');
+  const [editBoard, setEditBoard] = useState('CBSE');
+  const [editGuardianName, setEditGuardianName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editAssignedTeacherId, setEditAssignedTeacherId] = useState('');
+  const [editSubjectsStr, setEditSubjectsStr] = useState('');
+
   const loadData = async () => {
     try {
       const [resStd, resTch] = await Promise.all([
@@ -82,6 +93,50 @@ export default function StudentManagementPage() {
     }
   };
 
+  const handleOpenEditModal = (std: Student) => {
+    setSelectedStudent(std);
+    setEditName(std.name);
+    setEditGradeClass(std.grade_class);
+    setEditBoard(std.board);
+    setEditGuardianName(std.guardian_name);
+    setEditPhone(std.phone);
+    setEditAssignedTeacherId(std.assigned_teacher_id || (teachers[0]?.id || ''));
+    setEditSubjectsStr((std.subjects || []).join(', '));
+    setEditModalOpen(true);
+  };
+
+  const handleSaveEditStudent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStudent) return;
+
+    try {
+      const subjects = editSubjectsStr.split(',').map(s => s.trim()).filter(Boolean);
+      const res = await fetch('/api/admin/students', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentId: selectedStudent.id,
+          name: editName,
+          grade_class: editGradeClass,
+          board: editBoard,
+          guardian_name: editGuardianName,
+          phone: editPhone,
+          assigned_teacher_id: editAssignedTeacherId,
+          subjects,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update student');
+
+      setEditModalOpen(false);
+      setSelectedStudent(null);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message || 'Error updating student');
+    }
+  };
+
   const handleDeleteStudent = async (id: string) => {
     if (!confirm('Are you sure you want to delete this student record?')) return;
     try {
@@ -141,13 +196,22 @@ export default function StudentManagementPage() {
                 <h3 className="text-base font-black text-navy-primary mt-2">{s.name}</h3>
                 <p className="text-xs text-slate-500 font-medium">Guardian: {s.guardian_name}</p>
               </div>
-              <button
-                onClick={() => handleDeleteStudent(s.id)}
-                className="p-2 text-slate-400 hover:text-red-500 transition-colors"
-                title="Delete Student"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => handleOpenEditModal(s)}
+                  className="p-2 text-slate-400 hover:text-navy-primary transition-colors"
+                  title="Edit Student Details"
+                >
+                  <Edit3 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleDeleteStudent(s.id)}
+                  className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                  title="Delete Student"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             <div className="pt-2 border-t border-slate-100 space-y-1.5 text-xs text-slate-600">
@@ -281,6 +345,127 @@ export default function StudentManagementPage() {
                   className="py-2.5 px-5 bg-gold-accent hover:bg-gold-hover text-navy-dark font-extrabold text-xs rounded-xl shadow-md"
                 >
                   Enroll Student
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDIT STUDENT */}
+      {editModalOpen && selectedStudent && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-lg shadow-2xl border border-slate-200 my-auto max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-black text-navy-primary mb-1">Edit Student Details</h3>
+            <p className="text-xs text-slate-500 mb-4">Modify information for {selectedStudent.name}.</p>
+
+            <form onSubmit={handleSaveEditStudent} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-700 mb-1">Student Full Name</label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  placeholder="e.g. Student Full Name"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">Grade / Class</label>
+                  <select
+                    value={editGradeClass}
+                    onChange={e => setEditGradeClass(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none"
+                  >
+                    {['KG', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12'].map(g => (
+                      <option key={g} value={g}>{g}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">Education Board</label>
+                  <select
+                    value={editBoard}
+                    onChange={e => setEditBoard(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none"
+                  >
+                    {['CBSE', 'ICSE', 'State Syllabus', 'IGCSE', 'GCSE'].map(b => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">Guardian Name</label>
+                  <input
+                    type="text"
+                    value={editGuardianName}
+                    onChange={e => setEditGuardianName(e.target.value)}
+                    placeholder="Parent / Guardian"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">Contact Phone</label>
+                  <input
+                    type="text"
+                    value={editPhone}
+                    onChange={e => setEditPhone(e.target.value)}
+                    placeholder="+91 98765 43210"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-700 mb-1">Assign Primary Teacher</label>
+                <select
+                  value={editAssignedTeacherId}
+                  onChange={e => setEditAssignedTeacherId(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none"
+                  required
+                >
+                  {teachers.map(t => (
+                    <option key={t.id} value={t.id}>{t.name} ({t.subjects.join(', ')})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-700 mb-1">Enrolled Subjects</label>
+                <input
+                  type="text"
+                  value={editSubjectsStr}
+                  onChange={e => setEditSubjectsStr(e.target.value)}
+                  placeholder="Mathematics, Physics"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditModalOpen(false);
+                    setSelectedStudent(null);
+                  }}
+                  className="py-2.5 px-4 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="py-2.5 px-5 bg-gold-accent hover:bg-gold-hover text-navy-dark font-extrabold text-xs rounded-xl shadow-md"
+                >
+                  Save Changes
                 </button>
               </div>
             </form>
