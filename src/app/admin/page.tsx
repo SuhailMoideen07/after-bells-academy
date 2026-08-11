@@ -16,7 +16,8 @@ import {
   FileText,
   Sparkles,
 } from 'lucide-react';
-import type { AdminAnalytics, Schedule, ClassLog } from '@/types/tms';
+import { useAdminData } from '@/context/AdminDataContext';
+
 function formatTime12Hr(time24: string): string {
   if (!time24) return '';
   const [hStr, mStr] = time24.split(':');
@@ -29,48 +30,9 @@ function formatTime12Hr(time24: string): string {
 }
 
 export default function AdminOverviewPage() {
-  const [loading, setLoading] = useState(true);
-  const [analytics, setAnalytics] = useState<AdminAnalytics>({
-    classesToday: 0,
-    teachersActive: 0,
-    classesCompleted: 0,
-    classesCancelled: 0,
-    monthlyTeachingHours: 0,
-  });
-  const [totalTeachers, setTotalTeachers] = useState(0);
-  const [totalStudents, setTotalStudents] = useState(0);
-  const [todaySchedules, setTodaySchedules] = useState<Schedule[]>([]);
-  const [recentLogs, setRecentLogs] = useState<ClassLog[]>([]);
-
-  useEffect(() => {
-    const abortController = new AbortController();
-
-    async function loadData() {
-      try {
-        const res = await fetch('/api/admin/analytics', { signal: abortController.signal });
-        if (res.ok) {
-          const data = await res.json();
-          setAnalytics(data.analytics);
-          setTotalTeachers(data.totalTeachers || 0);
-          setTotalStudents(data.totalStudents || 0);
-          setTodaySchedules(data.todaySchedules || []);
-          setRecentLogs(data.recentLogs || []);
-        }
-      } catch (err) {
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadData();
-    const interval = setInterval(loadData, 30000); // Refresh every 30s
-    return () => {
-      clearInterval(interval);
-      abortController.abort();
-    };
-  }, []);
+  const { analytics, teachers, students, todaySchedules, recentLogs, loading } = useAdminData();
+  const totalTeachers = teachers.length;
+  const totalStudents = students.length;
 
   if (loading) {
     return (

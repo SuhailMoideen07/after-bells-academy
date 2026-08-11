@@ -94,13 +94,22 @@ export function addOneHour(time24: string): string {
   return `${String(h).padStart(2, '0')}:${mStr || '00'}`;
 }
 
+import { useAdminData } from '@/context/AdminDataContext';
+
 export default function SchedulesManagementPage() {
-  const [schedules, setSchedules] = useState<Schedule[]>([]);
-  const [teachers, setTeachers] = useState<Teacher[]>([]);
-  const [students, setStudents] = useState<Student[]>([]);
+  const {
+    schedules,
+    teachers,
+    students,
+    batches,
+    loading,
+    addScheduleLocally,
+    updateScheduleLocally,
+    deleteScheduleLocally,
+    addBatchLocally,
+    refetchAdminData,
+  } = useAdminData();
   const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [batches, setBatches] = useState<Batch[]>([]);
-  const [loading, setLoading] = useState(true);
 
   // Filters
   const [search, setSearch] = useState('');
@@ -126,47 +135,17 @@ export default function SchedulesManagementPage() {
   const [dayOfWeek, setDayOfWeek] = useState('Today');
   const [startTime, setStartTime] = useState('16:00');
   const [endTime, setEndTime] = useState('17:00');
-
   const handleStartTimeSelect = (newStartTime: string) => {
     setStartTime(newStartTime);
     setEndTime(addOneHour(newStartTime));
   };
 
-  const loadData = async () => {
-    try {
-      const [resSch, resTch, resStd, resBtc] = await Promise.all([
-        fetch('/api/admin/schedules'),
-        fetch('/api/admin/teachers'),
-        fetch('/api/admin/students'),
-        fetch('/api/admin/batches'),
-      ]);
-
-      if (resSch.ok && resTch.ok && resStd.ok) {
-        const dSch = await resSch.json();
-        const dTch = await resTch.json();
-        const dStd = await resStd.json();
-        const dBtc = resBtc.ok ? await resBtc.json() : { batches: [] };
-
-        setSchedules(dSch.schedules || []);
-        setTeachers(dTch.teachers || []);
-        setStudents(dStd.students || []);
-        setBatches(dBtc.batches || []);
-
-        if (dTch.teachers.length > 0 && !teacherId) setTeacherId(dTch.teachers[0].id);
-        if (dStd.students.length > 0 && selectedStudentIds.length === 0) {
-          setSelectedStudentIds([dStd.students[0].id]);
-        }
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    loadData();
-  }, []);
+    if (teachers.length > 0 && !teacherId) setTeacherId(teachers[0].id);
+    if (students.length > 0 && selectedStudentIds.length === 0) {
+      setSelectedStudentIds([students[0].id]);
+    }
+  }, [teachers, students, teacherId, selectedStudentIds]);
 
   // Strict Validation: enforce exactly 1 hour (60 minutes) schedule duration
   const [sH, sM] = startTime.split(':').map(Number);
@@ -273,7 +252,11 @@ export default function SchedulesManagementPage() {
       setModalOpen(false);
       setEditingSchedule(null);
       setBatchName('');
-      await loadData();
+      if (data.schedule) {
+        if (isEditing) updateScheduleLocally(editingSchedule!.id, data.schedule);
+        else addScheduleLocally(data.schedule);
+      }
+      refetchAdminData();
     } catch (err: any) {
       alert(err.message || 'Error saving schedule');
     }
@@ -284,7 +267,7 @@ export default function SchedulesManagementPage() {
     try {
       const res = await fetch('/api/admin/schedules?all=true', { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to clear schedules');
-      await loadData();
+      refetchAdminData();
     } catch (err: any) {
       alert(err.message || 'Error clearing schedules');
     }
@@ -293,11 +276,13 @@ export default function SchedulesManagementPage() {
   const handleDeleteSchedule = async (id: string) => {
     if (!confirm('Are you sure you want to delete this schedule?')) return;
     try {
+      deleteScheduleLocally(id);
       const res = await fetch(`/api/admin/schedules?id=${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete schedule');
-      await loadData();
+      refetchAdminData();
     } catch (err: any) {
       alert(err.message || 'Error deleting schedule');
+      refetchAdminData();
     }
   };
 
@@ -329,7 +314,7 @@ export default function SchedulesManagementPage() {
       }
 
       if (data.batch) {
-        setBatches(prev => [...prev, data.batch]);
+        addBatchLocally(data.batch);
         setSelectedBatchId(data.batch.id);
         setBatchName(data.batch.name);
         if (data.batch.student_ids && data.batch.student_ids.length > 0) {
@@ -338,6 +323,7 @@ export default function SchedulesManagementPage() {
         setNewBatchTitle('');
         setNewBatchStudentIds([]);
         setNewBatchModalOpen(false);
+        refetchAdminData();
       }
     } catch (err: any) {
       alert(err.message || 'Error saving batch');

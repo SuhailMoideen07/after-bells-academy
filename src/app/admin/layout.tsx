@@ -17,6 +17,8 @@ import {
   X,
 } from 'lucide-react';
 
+import { AdminDataProvider } from '@/context/AdminDataContext';
+
 const ADMIN_NAV = [
   { label: 'Overview', href: '/admin', icon: LayoutDashboard },
   { label: 'Teachers', href: '/admin/teachers', icon: Users },
@@ -147,7 +149,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       {/* Main Content Area */}
       <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
-        {children}
+        <AdminDataProvider>
+          {children}
+        </AdminDataProvider>
       </main>
     </div>
   );

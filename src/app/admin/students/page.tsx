@@ -2,12 +2,19 @@
 
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, UserCheck, Trash2, Edit3, Phone, GraduationCap } from 'lucide-react';
-import type { Student, Teacher } from '@/types/tms';
+import type { Student } from '@/types/tms';
+import { useAdminData } from '@/context/AdminDataContext';
 
 export default function StudentManagementPage() {
-  const [students, setStudents] = useState<Student[]>([]);
-  const [teachers, setTeachers] = useState<Teacher[]>([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    students,
+    teachers,
+    loading,
+    addStudentLocally,
+    updateStudentLocally,
+    deleteStudentLocally,
+    refetchAdminData,
+  } = useAdminData();
   const [search, setSearch] = useState('');
 
   // Add modal state
@@ -31,35 +38,10 @@ export default function StudentManagementPage() {
   const [editAssignedTeacherId, setEditAssignedTeacherId] = useState('');
   const [editSubjectsStr, setEditSubjectsStr] = useState('');
 
-  const loadData = async () => {
-    try {
-      const [resStd, resTch] = await Promise.all([
-        fetch('/api/admin/students'),
-        fetch('/api/admin/teachers'),
-      ]);
-      if (resStd.ok && resTch.ok) {
-        const dStd = await resStd.json();
-        const dTch = await resTch.json();
-        setStudents(dStd.students || []);
-        setTeachers(dTch.teachers || []);
-        if (dTch.teachers && dTch.teachers.length > 0) {
-          setAssignedTeacherId(dTch.teachers[0].id);
-        }
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !guardianName || !phone || !assignedTeacherId) {
+    const teacherIdToAssign = assignedTeacherId || (teachers[0]?.id || '');
+    if (!name || !guardianName || !phone || !teacherIdToAssign) {
       alert('Please fill out all required fields');
       return;
     }
@@ -75,7 +57,7 @@ export default function StudentManagementPage() {
           board,
           guardian_name: guardianName,
           phone,
-          assigned_teacher_id: assignedTeacherId,
+          assigned_teacher_id: teacherIdToAssign,
           subjects,
         }),
       });
@@ -87,7 +69,8 @@ export default function StudentManagementPage() {
       setName('');
       setGuardianName('');
       setPhone('');
-      await loadData();
+      if (data.student) addStudentLocally(data.student);
+      refetchAdminData();
     } catch (err: any) {
       alert(err.message || 'Error adding student');
     }
@@ -131,7 +114,8 @@ export default function StudentManagementPage() {
 
       setEditModalOpen(false);
       setSelectedStudent(null);
-      await loadData();
+      if (data.student) updateStudentLocally(selectedStudent.id, data.student);
+      refetchAdminData();
     } catch (err: any) {
       alert(err.message || 'Error updating student');
     }
@@ -140,12 +124,16 @@ export default function StudentManagementPage() {
   const handleDeleteStudent = async (id: string) => {
     if (!confirm('Are you sure you want to delete this student record?')) return;
     try {
+      deleteStudentLocally(id);
       const res = await fetch(`/api/admin/students?id=${id}`, { method: 'DELETE' });
       if (res.ok) {
-        await loadData();
+        refetchAdminData();
+      } else {
+        refetchAdminData();
       }
     } catch (err) {
       console.error(err);
+      refetchAdminData();
     }
   };
 

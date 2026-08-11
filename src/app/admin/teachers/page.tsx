@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Search, UserCheck, KeyRound, Power, Edit3, ShieldAlert, Check, Trash2, Clock, Calendar, GraduationCap, FileSpreadsheet, X, Users, BookOpen } from 'lucide-react';
 import type { Teacher, ClassLog, Student } from '@/types/tms';
 
+import { useAdminData } from '@/context/AdminDataContext';
+
 function formatDateDDMMYYYY(dateStr: string): string {
   if (!dateStr) return '';
   const parts = dateStr.split('T')[0].split('-');
@@ -31,8 +33,15 @@ function getTeacherInitials(name?: string): string {
 }
 
 export default function TeacherManagementPage() {
-  const [teachers, setTeachers] = useState<Teacher[]>([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    teachers,
+    students,
+    loading,
+    addTeacherLocally,
+    updateTeacherLocally,
+    deleteTeacherLocally,
+    refetchAdminData,
+  } = useAdminData();
   const [search, setSearch] = useState('');
 
   // Modals state
@@ -63,24 +72,6 @@ export default function TeacherManagementPage() {
   const [activityStudents, setActivityStudents] = useState<Student[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
 
-  const loadTeachers = async () => {
-    try {
-      const res = await fetch('/api/admin/teachers');
-      if (res.ok) {
-        const data = await res.json();
-        setTeachers(data.teachers || []);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadTeachers();
-  }, []);
-
   const handleCreateTeacher = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -100,7 +91,8 @@ export default function TeacherManagementPage() {
       setPhone('');
       setPassword('');
       setBio('');
-      await loadTeachers();
+      if (data.teacher) addTeacherLocally(data.teacher);
+      refetchAdminData();
     } catch (err: any) {
       alert(err.message || 'Error creating teacher');
     }
@@ -140,7 +132,8 @@ export default function TeacherManagementPage() {
 
       setEditModalOpen(false);
       setSelectedTeacher(null);
-      await loadTeachers();
+      if (data.teacher) updateTeacherLocally(selectedTeacher.id, data.teacher);
+      refetchAdminData();
     } catch (err: any) {
       alert(err.message || 'Error updating teacher');
     }
@@ -152,20 +145,13 @@ export default function TeacherManagementPage() {
     setActivityLoading(true);
 
     try {
-      const [resLogs, resStd] = await Promise.all([
-        fetch(`/api/admin/logs?teacherId=${teacher.id}`),
-        fetch('/api/admin/students'),
-      ]);
-
-      if (resLogs.ok && resStd.ok) {
+      const resLogs = await fetch(`/api/admin/logs?teacherId=${teacher.id}`);
+      if (resLogs.ok) {
         const dLogs = await resLogs.json();
-        const dStd = await resStd.json();
         setActivityLogs(dLogs.logs || []);
-        const teacherStudents = (dStd.students || []).filter(
-          (s: Student) => s.assigned_teacher_id === teacher.id
-        );
-        setActivityStudents(teacherStudents);
       }
+      const teacherStudents = students.filter((s: Student) => s.assigned_teacher_id === teacher.id);
+      setActivityStudents(teacherStudents);
     } catch (err) {
       console.error(err);
     } finally {
@@ -174,15 +160,18 @@ export default function TeacherManagementPage() {
   };
 
   const handleToggleStatus = async (teacher: Teacher) => {
+    const newStatus = teacher.status === 'active' ? 'disabled' : 'active';
+    updateTeacherLocally(teacher.id, { status: newStatus as any });
     try {
       const res = await fetch('/api/admin/teachers', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ teacherId: teacher.id, action: 'toggle_status' }),
       });
-      if (res.ok) await loadTeachers();
+      if (res.ok) refetchAdminData();
     } catch (err) {
       console.error(err);
+      refetchAdminData();
     }
   };
 
@@ -190,11 +179,13 @@ export default function TeacherManagementPage() {
     if (!confirm(`Are you sure you want to delete teacher "${teacher.name}"? This action cannot be undone.`)) return;
 
     try {
+      deleteTeacherLocally(teacher.id);
       const res = await fetch(`/api/admin/teachers?id=${teacher.id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete teacher');
-      await loadTeachers();
+      refetchAdminData();
     } catch (err: any) {
       alert(err.message || 'Error deleting teacher');
+      refetchAdminData();
     }
   };
 

@@ -3,11 +3,17 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Users, Layers, Search, BookOpen, GraduationCap, Sparkles } from 'lucide-react';
 import type { Batch, Student, Subject } from '@/types/tms';
+import { useAdminData } from '@/context/AdminDataContext';
 
 export default function BatchesManagementPage() {
-  const [batches, setBatches] = useState<Batch[]>([]);
-  const [students, setStudents] = useState<Student[]>([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    batches,
+    students,
+    loading,
+    addBatchLocally,
+    deleteBatchLocally,
+    refetchAdminData,
+  } = useAdminData();
   const [search, setSearch] = useState('');
 
   // Modals
@@ -20,30 +26,6 @@ export default function BatchesManagementPage() {
 
   // Expanded batch viewer
   const [expandedBatchId, setExpandedBatchId] = useState<string | null>(null);
-
-  const loadData = async () => {
-    try {
-      const [resBtc, resStd] = await Promise.all([
-        fetch('/api/admin/batches'),
-        fetch('/api/admin/students'),
-      ]);
-
-      if (resBtc.ok && resStd.ok) {
-        const dBtc = await resBtc.json();
-        const dStd = await resStd.json();
-        setBatches(dBtc.batches || []);
-        setStudents(dStd.students || []);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
 
   const handleOpenAddModal = () => {
     setEditingBatch(null);
@@ -89,7 +71,8 @@ export default function BatchesManagementPage() {
       if (!res.ok) throw new Error(data.error || 'Failed to save batch');
 
       setModalOpen(false);
-      await loadData();
+      if (data.batch) addBatchLocally(data.batch);
+      refetchAdminData();
     } catch (err: any) {
       alert(err.message || 'Error saving batch');
     }
@@ -99,11 +82,13 @@ export default function BatchesManagementPage() {
     if (!confirm(`Are you sure you want to delete batch "${batchTitle}"?`)) return;
 
     try {
+      deleteBatchLocally(id);
       const res = await fetch(`/api/admin/batches?id=${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete batch');
-      await loadData();
+      refetchAdminData();
     } catch (err: any) {
       alert(err.message || 'Error deleting batch');
+      refetchAdminData();
     }
   };
 

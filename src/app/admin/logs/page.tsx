@@ -4,6 +4,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, FileSpreadsheet, CheckCircle, XCircle, Clock, Calendar, User, Layers, Users, X, Download } from 'lucide-react';
 import type { ClassLog, Teacher, Student, Batch } from '@/types/tms';
 
+import { useAdminData } from '@/context/AdminDataContext';
+
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 function generateMonthOptions(): { value: string; label: string }[] {
@@ -44,11 +46,25 @@ function formatTime12Hr(time24: string): string {
 }
 
 export default function MasterClassLogsPage() {
-  const [logs, setLogs] = useState<ClassLog[]>([]);
-  const [teachers, setTeachers] = useState<Teacher[]>([]);
-  const [students, setStudents] = useState<Student[]>([]);
-  const [batches, setBatches] = useState<Batch[]>([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    teachers: contextTeachers,
+    students: contextStudents,
+    batches: contextBatches,
+    recentLogs: contextLogs,
+  } = useAdminData();
+
+  const [logs, setLogs] = useState<ClassLog[]>(contextLogs);
+  const [teachers, setTeachers] = useState<Teacher[]>(contextTeachers);
+  const [students, setStudents] = useState<Student[]>(contextStudents);
+  const [batches, setBatches] = useState<Batch[]>(contextBatches);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (contextTeachers.length > 0) setTeachers(contextTeachers);
+    if (contextStudents.length > 0) setStudents(contextStudents);
+    if (contextBatches.length > 0) setBatches(contextBatches);
+    if (contextLogs.length > 0 && logs.length === 0) setLogs(contextLogs);
+  }, [contextTeachers, contextStudents, contextBatches, contextLogs]);
 
   // Filters
   const [search, setSearch] = useState('');
@@ -70,35 +86,18 @@ export default function MasterClassLogsPage() {
       if (selectedSubject) query.append('subject', selectedSubject);
       if (selectedMonth) query.append('month', selectedMonth);
 
-      const [resLogs, resTch, resStd, resBtc] = await Promise.all([
-        fetch(`/api/admin/logs?${query.toString()}`),
-        fetch('/api/admin/teachers'),
-        fetch('/api/admin/students'),
-        fetch('/api/admin/batches'),
-      ]);
-
-      if (resLogs.ok && resTch.ok && resStd.ok) {
+      const resLogs = await fetch(`/api/admin/logs?${query.toString()}`);
+      if (resLogs.ok) {
         const dLogs = await resLogs.json();
-        const dTch = await resTch.json();
-        const dStd = await resStd.json();
-        const dBtc = resBtc.ok ? await resBtc.json() : { batches: [] };
-
         setLogs(dLogs.logs || []);
-        setTeachers(dTch.teachers || []);
-        setStudents(dStd.students || []);
-        setBatches(dBtc.batches || []);
       }
     } catch (err) {
       console.error(err);
-    } finally {
-      setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchLogs();
-    const interval = setInterval(fetchLogs, 3000);
-    return () => clearInterval(interval);
   }, [search, selectedTeacher, selectedStatus, selectedSubject, selectedMonth]);
 
   const monthOptions = useMemo(() => generateMonthOptions(), []);
