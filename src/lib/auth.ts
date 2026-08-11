@@ -59,6 +59,17 @@ export async function verifyJWT(token: string): Promise<TokenPayload | null> {
   }
 }
 
+// Short-term in-memory user cache (15s TTL) to prevent repeated auth DB calls on parallel sub-fetches
+const userAuthCache = new Map<string, { user: User; expiresAt: number }>();
+
+export function invalidateUserAuthCache(userId?: string) {
+  if (userId) {
+    userAuthCache.delete(userId);
+  } else {
+    userAuthCache.clear();
+  }
+}
+
 export async function getSessionUser(): Promise<User | null> {
   try {
     const cookieStore = await cookies();
@@ -68,7 +79,19 @@ export async function getSessionUser(): Promise<User | null> {
     const payload = await verifyJWT(tokenCookie.value);
     if (!payload || !payload.userId) return null;
 
-    const user = await db.findUserById(payload.userId);
+    const now = Date.now();
+    const cached = userAuthCache.get(payload.userId);
+    let user: User | undefined;
+
+    if (cached && cached.expiresAt > now) {
+      user = cached.user;
+    } else {
+      user = await db.findUserById(payload.userId);
+      if (user) {
+        userAuthCache.set(payload.userId, { user, expiresAt: now + 15000 });
+      }
+    }
+
     if (!user || user.status === 'disabled') return null;
 
     return user;

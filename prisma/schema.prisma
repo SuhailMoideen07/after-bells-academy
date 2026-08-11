@@ -54,6 +54,8 @@ model Teacher {
   schedules            Schedule[]
   classLogs            ClassLog[]
 
+  @@index([name])
+  @@index([status])
   @@map("teachers")
 }
 
@@ -70,6 +72,9 @@ model Student {
   status            Status   @default(active)
   createdAt         DateTime @default(now()) @map("created_at")
 
+  @@index([assignedTeacherId])
+  @@index([name])
+  @@index([status])
   @@map("students")
 }
 
@@ -113,6 +118,9 @@ model Schedule {
   rescheduledAt DateTime?      @map("rescheduled_at")
   classLogs     ClassLog[]
 
+  @@index([teacherId])
+  @@index([date])
+  @@index([status])
   @@map("schedules")
 }
 
@@ -139,6 +147,8 @@ model ClassLog {
   cancelledReason String?   @map("cancelled_reason")
   createdAt       DateTime  @default(now()) @map("created_at")
 
+  @@index([teacherId])
+  @@index([date])
   @@map("class_logs")
 }
 

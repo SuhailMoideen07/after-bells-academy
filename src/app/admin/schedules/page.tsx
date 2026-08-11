@@ -179,6 +179,22 @@ export default function SchedulesManagementPage() {
   const isNotOneHour = durationMinutes !== 60;
   const isTimeInvalid = isTimeInverted || isNotOneHour;
 
+  const handleOpenCreateModal = () => {
+    setEditingSchedule(null);
+    setBatchName('');
+    setSelectedBatchId('');
+    if (teachers.length > 0) setTeacherId(teachers[0].id);
+    if (students.length > 0) setSelectedStudentIds([students[0].id]);
+    else setSelectedStudentIds([]);
+    setSubjectName('Mathematics');
+    const today = getLocalTodayString();
+    setDate(today);
+    setDayOfWeek(calculateDayTag(today));
+    setStartTime('16:00');
+    setEndTime('17:00');
+    setModalOpen(true);
+  };
+
   const handleOpenEditModal = (sch: Schedule) => {
     setEditingSchedule(sch);
     setTeacherId(sch.teacher_id);
@@ -356,8 +372,8 @@ export default function SchedulesManagementPage() {
 
     if (ids.length === 0 && names.length === 0) return students;
 
-    return students.filter(s => ids.includes(s.id) || names.includes(s.name));
-  }, [selectedBatchId, batches, students]);
+    return students.filter(s => ids.includes(s.id) || names.includes(s.name) || selectedStudentIds.includes(s.id));
+  }, [selectedBatchId, batches, students, selectedStudentIds]);
 
   return (
     <div className="space-y-6">
@@ -374,7 +390,7 @@ export default function SchedulesManagementPage() {
             <Plus className="w-4 h-4" /> Create New Batch
           </button>
           <button
-            onClick={() => setModalOpen(true)}
+            onClick={handleOpenCreateModal}
             className="px-4 py-2.5 bg-gold-accent hover:bg-gold-hover text-navy-dark font-extrabold text-xs rounded-xl shadow-md flex items-center gap-1.5"
           >
             <Plus className="w-4 h-4" /> Create Class Schedule

@@ -520,6 +520,15 @@ class JsonDatabaseManager {
 
 const jsonDb = new JsonDatabaseManager();
 
+// Short TTL memory cache for read-heavy student & teacher lists (10 seconds)
+let cachedTeachersList: { data: Teacher[]; expiresAt: number } | null = null;
+let cachedStudentsList: { data: Student[]; expiresAt: number } | null = null;
+
+export function clearDbDataCache() {
+  cachedTeachersList = null;
+  cachedStudentsList = null;
+}
+
 // --- Async Database Interface (Prisma + Postgres with JSON Fallback) ---
 export const db = {
   async findUserByEmail(email: string): Promise<User | undefined> {
@@ -580,6 +589,7 @@ export const db = {
   },
 
   async updateUserStatus(userId: string, status: 'active' | 'disabled'): Promise<boolean> {
+    clearDbDataCache();
     if (!isPrismaEnabled()) return jsonDb.updateUserStatus(userId, status);
     const pStatus = status === 'disabled' ? Status.disabled : Status.active;
     await prisma.user.update({ where: { id: userId }, data: { status: pStatus } });
@@ -589,8 +599,12 @@ export const db = {
 
   async getAllTeachers(): Promise<Teacher[]> {
     if (!isPrismaEnabled()) return jsonDb.getAllTeachers();
+    const now = Date.now();
+    if (cachedTeachersList && cachedTeachersList.expiresAt > now) {
+      return cachedTeachersList.data;
+    }
     const list = await prisma.teacher.findMany({ orderBy: { name: 'asc' } });
-    return list.map(t => ({
+    const result = list.map(t => ({
       id: t.id,
       user_id: t.userId,
       email: t.email,
@@ -603,6 +617,8 @@ export const db = {
       status: t.status as any,
       created_at: t.createdAt.toISOString(),
     }));
+    cachedTeachersList = { data: result, expiresAt: now + 10000 };
+    return result;
   },
 
   async getTeacherById(id: string): Promise<Teacher | undefined> {
@@ -644,6 +660,7 @@ export const db = {
   },
 
   async createTeacherAccount(params: { name: string; email: string; phone: string; passwordRaw: string; subjects: string[]; bio?: string }): Promise<Teacher> {
+    clearDbDataCache();
     if (!isPrismaEnabled()) return jsonDb.createTeacherAccount(params);
     const newUser = await this.createUser({ email: params.email, name: params.name, role: 'teacher', status: 'active' }, params.passwordRaw);
     const teacherId = 'tch_' + Date.now();
@@ -678,6 +695,7 @@ export const db = {
   },
 
   async updateTeacher(id: string, updates: Partial<Teacher>): Promise<Teacher | undefined> {
+    clearDbDataCache();
     if (!isPrismaEnabled()) return jsonDb.updateTeacher(id, updates);
     const current = await this.getTeacherById(id);
     if (!current) return undefined;
@@ -721,6 +739,7 @@ export const db = {
   },
 
   async deleteTeacher(id: string): Promise<boolean> {
+    clearDbDataCache();
     if (!isPrismaEnabled()) return jsonDb.deleteTeacher(id);
     const teacher = await prisma.teacher.findUnique({ where: { id } });
     if (!teacher) return false;
@@ -739,8 +758,12 @@ export const db = {
 
   async getAllStudents(): Promise<Student[]> {
     if (!isPrismaEnabled()) return jsonDb.getAllStudents();
+    const now = Date.now();
+    if (cachedStudentsList && cachedStudentsList.expiresAt > now) {
+      return cachedStudentsList.data;
+    }
     const list = await prisma.student.findMany({ include: { teacher: true }, orderBy: { name: 'asc' } });
-    return list.map(s => ({
+    const result = list.map(s => ({
       id: s.id,
       name: s.name,
       grade_class: s.gradeClass,
@@ -753,6 +776,8 @@ export const db = {
       status: s.status as any,
       created_at: s.createdAt.toISOString(),
     }));
+    cachedStudentsList = { data: result, expiresAt: now + 10000 };
+    return result;
   },
 
   async getStudentById(id: string): Promise<Student | undefined> {
@@ -793,6 +818,7 @@ export const db = {
   },
 
   async createStudent(params: Omit<Student, 'id' | 'created_at' | 'assigned_teacher_name'>): Promise<Student> {
+    clearDbDataCache();
     if (!isPrismaEnabled()) return jsonDb.createStudent(params);
     const id = 'std_' + Date.now();
     const teacher = params.assigned_teacher_id ? await prisma.teacher.findUnique({ where: { id: params.assigned_teacher_id } }) : null;
@@ -831,6 +857,7 @@ export const db = {
   },
 
   async updateStudent(id: string, updates: Partial<Student>): Promise<Student | undefined> {
+    clearDbDataCache();
     if (!isPrismaEnabled()) return jsonDb.updateStudent(id, updates);
     const current = await prisma.student.findUnique({ where: { id } });
     if (!current) return undefined;
@@ -873,6 +900,7 @@ export const db = {
   },
 
   async deleteStudent(id: string): Promise<boolean> {
+    clearDbDataCache();
     if (!isPrismaEnabled()) return jsonDb.deleteStudent(id);
     const current = await prisma.student.findUnique({ where: { id } });
     if (!current) return false;
@@ -1124,12 +1152,19 @@ export const db = {
     const s = await prisma.schedule.update({
       where: { id },
       data: {
-        ...(updates.start_time && { startTime: updates.start_time }),
-        ...(updates.end_time && { endTime: updates.end_time }),
-        ...(updates.date && { date: updates.date }),
-        ...(updates.teacher_id && { teacherId: updates.teacher_id }),
-        ...(updates.subject_name && { subjectName: updates.subject_name }),
-        ...(updates.status && {
+        ...(updates.start_time !== undefined && { startTime: updates.start_time }),
+        ...(updates.end_time !== undefined && { endTime: updates.end_time }),
+        ...(updates.date !== undefined && { date: updates.date }),
+        ...(updates.teacher_id !== undefined && { teacherId: updates.teacher_id }),
+        ...(updates.student_id !== undefined && { studentId: updates.student_id }),
+        ...(updates.student_name !== undefined && { studentName: updates.student_name }),
+        ...(updates.student_names !== undefined && { studentNames: updates.student_names }),
+        ...(updates.is_batch !== undefined && { isBatch: updates.is_batch }),
+        ...(updates.batch_name !== undefined && { batchName: updates.batch_name }),
+        ...(updates.subject_name !== undefined && { subjectName: updates.subject_name }),
+        ...(updates.grade_class !== undefined && { gradeClass: updates.grade_class }),
+        ...(updates.day_of_week !== undefined && { dayOfWeek: updates.day_of_week }),
+        ...(updates.status !== undefined && {
           status: updates.status === 'in_progress' ? ScheduleStatus.in_progress :
                   updates.status === 'completed' ? ScheduleStatus.completed :
                   updates.status === 'cancelled' ? ScheduleStatus.cancelled : ScheduleStatus.scheduled
