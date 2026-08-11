@@ -167,9 +167,9 @@ export default function TeacherDashboardPage() {
 
   const [fetchError, setFetchError] = useState<string>('');
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = async (isSilent: boolean = false) => {
     try {
-      setRefreshing(true);
+      if (!isSilent) setRefreshing(true);
       setFetchError('');
       const res = await fetch('/api/teacher/dashboard');
       if (!res.ok) {
@@ -189,7 +189,7 @@ export default function TeacherDashboardPage() {
       setNotifications(data.notifications || []);
     } catch (err: any) {
       console.error('Dashboard load error:', err);
-      setFetchError(err.message || 'Error loading dashboard. Please check your connection.');
+      if (!isSilent) setFetchError(err.message || 'Error loading dashboard. Please check your connection.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -197,7 +197,46 @@ export default function TeacherDashboardPage() {
   };
 
   useEffect(() => {
-    fetchDashboardData();
+    fetchDashboardData(false);
+
+    let intervalId: NodeJS.Timeout | null = null;
+
+    const startPolling = () => {
+      if (!intervalId && typeof document !== 'undefined' && !document.hidden) {
+        intervalId = setInterval(() => {
+          if (typeof document !== 'undefined' && !document.hidden) {
+            fetchDashboardData(true);
+          }
+        }, 15000); // 15s active polling
+      }
+    };
+
+    const stopPolling = () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+
+    const handleFocusOrVisibility = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        fetchDashboardData(true);
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    };
+
+    startPolling();
+
+    window.addEventListener('focus', handleFocusOrVisibility);
+    document.addEventListener('visibilitychange', handleFocusOrVisibility);
+
+    return () => {
+      stopPolling();
+      window.removeEventListener('focus', handleFocusOrVisibility);
+      document.removeEventListener('visibilitychange', handleFocusOrVisibility);
+    };
   }, []);
 
   const handleLogout = async () => {
@@ -598,7 +637,7 @@ export default function TeacherDashboardPage() {
 
           <div className="flex flex-col items-center sm:items-end justify-between gap-3 self-stretch">
             <button
-              onClick={fetchDashboardData}
+              onClick={() => fetchDashboardData(false)}
               disabled={refreshing}
               className="flex items-center gap-1 text-xs font-bold text-navy-primary hover:text-gold-accent transition-colors"
             >
