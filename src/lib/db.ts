@@ -72,6 +72,7 @@ const isPrismaEnabled = () => Boolean(process.env.DATABASE_URL && process.env.DA
 class JsonDatabaseManager {
   private data: DatabaseSchema;
   private passwords: Record<string, string> = {};
+  private lastMtime: number = 0;
 
   constructor() {
     this.ensureDirectory();
@@ -87,6 +88,14 @@ class JsonDatabaseManager {
   }
 
   public reloadDiskData(): DatabaseSchema {
+    if (fs.existsSync(DB_FILE)) {
+      try {
+        const stat = fs.statSync(DB_FILE);
+        if (this.data && this.lastMtime > 0 && stat.mtimeMs === this.lastMtime) {
+          return this.data;
+        }
+      } catch (_) {}
+    }
     this.data = this.loadDatabase();
     return this.data;
   }
@@ -109,6 +118,8 @@ class JsonDatabaseManager {
     }
 
     try {
+      const stat = fs.statSync(DB_FILE);
+      this.lastMtime = stat.mtimeMs;
       const raw = fs.readFileSync(DB_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
       this.passwords = parsed._passwords || {};
@@ -132,6 +143,10 @@ class JsonDatabaseManager {
     try {
       const payload = { ...data, _passwords: passwords };
       fs.writeFileSync(DB_FILE, JSON.stringify(payload, null, 2), 'utf-8');
+      if (fs.existsSync(DB_FILE)) {
+        const stat = fs.statSync(DB_FILE);
+        this.lastMtime = stat.mtimeMs;
+      }
     } catch (_) {}
   }
 

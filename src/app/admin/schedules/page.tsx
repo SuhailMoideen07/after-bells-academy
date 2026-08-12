@@ -107,6 +107,7 @@ export default function SchedulesManagementPage() {
     updateScheduleLocally,
     deleteScheduleLocally,
     addBatchLocally,
+    deleteBatchLocally,
     refetchAdminData,
   } = useAdminData();
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -123,6 +124,8 @@ export default function SchedulesManagementPage() {
   // Add/Edit modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmittingBatch, setIsSubmittingBatch] = useState(false);
   const [newBatchModalOpen, setNewBatchModalOpen] = useState(false);
   const [newBatchTitle, setNewBatchTitle] = useState('');
   const [newBatchStudentIds, setNewBatchStudentIds] = useState<string[]>([]);
@@ -205,6 +208,8 @@ export default function SchedulesManagementPage() {
 
   const handleCreateSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     if (!teacherId || selectedStudentIds.length === 0 || !subjectName || !date || !startTime || !endTime) {
       alert('Please select at least one student and fill out all schedule parameters.');
       return;
@@ -215,22 +220,57 @@ export default function SchedulesManagementPage() {
       return;
     }
 
+    setIsSubmitting(true);
+
+    const selectedStudents = students.filter(s => selectedStudentIds.includes(s.id));
+    const studentNames = selectedStudents.map(s => s.name);
+    const selectedTeacherObj = teachers.find(t => t.id === teacherId);
+
+    const displayStudentName = batchName
+      ? `${batchName} (${selectedStudents.length} Students)`
+      : selectedStudents.length > 1
+      ? `${selectedStudents[0].name} +${selectedStudents.length - 1} others`
+      : selectedStudents[0]?.name || 'Student';
+
+    const isEditing = Boolean(editingSchedule);
+    const targetEditId = editingSchedule?.id;
+
+    const optimisticSchedule: Schedule = {
+      id: isEditing ? targetEditId! : 'sch_opt_' + Date.now(),
+      teacher_id: teacherId,
+      teacher_name: selectedTeacherObj?.name || editingSchedule?.teacher_name || 'Teacher',
+      student_id: selectedStudentIds[0] || 'batch_grp',
+      student_name: displayStudentName,
+      student_names: studentNames,
+      batch_name: batchName,
+      is_batch: selectedStudents.length > 1 || Boolean(batchName),
+      subject_name: subjectName,
+      grade_class: selectedStudents[0] ? selectedStudents[0].grade_class : 'General',
+      day_of_week: dayOfWeek,
+      start_time: startTime,
+      end_time: endTime,
+      date,
+      status: editingSchedule?.status || 'scheduled',
+      is_rescheduled: isEditing ? true : undefined,
+    };
+
+    // Instant Feedback: Optimistically update state & close modal instantly!
+    if (isEditing && targetEditId) {
+      updateScheduleLocally(targetEditId, optimisticSchedule);
+    } else {
+      addScheduleLocally(optimisticSchedule);
+    }
+
+    setModalOpen(false);
+    setEditingSchedule(null);
+    setBatchName('');
+
     try {
-      const selectedStudents = students.filter(s => selectedStudentIds.includes(s.id));
-      const studentNames = selectedStudents.map(s => s.name);
-
-      const displayStudentName = batchName
-        ? `${batchName} (${selectedStudents.length} Students)`
-        : selectedStudents.length > 1
-        ? `${selectedStudents[0].name} +${selectedStudents.length - 1} others`
-        : selectedStudents[0]?.name || 'Student';
-
-      const isEditing = Boolean(editingSchedule);
       const res = await fetch('/api/admin/schedules', {
         method: isEditing ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...(isEditing && { id: editingSchedule!.id }),
+          ...(isEditing && { id: targetEditId }),
           teacher_id: teacherId,
           student_id: selectedStudentIds[0] || 'batch_grp',
           student_name: displayStudentName,
@@ -249,16 +289,23 @@ export default function SchedulesManagementPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to save schedule');
 
-      setModalOpen(false);
-      setEditingSchedule(null);
-      setBatchName('');
       if (data.schedule) {
-        if (isEditing) updateScheduleLocally(editingSchedule!.id, data.schedule);
-        else addScheduleLocally(data.schedule);
+        if (isEditing && targetEditId) {
+          updateScheduleLocally(targetEditId, data.schedule);
+        } else {
+          deleteScheduleLocally(optimisticSchedule.id);
+          addScheduleLocally(data.schedule);
+        }
       }
       refetchAdminData();
     } catch (err: any) {
       alert(err.message || 'Error saving schedule');
+      if (!isEditing) {
+        deleteScheduleLocally(optimisticSchedule.id);
+      }
+      refetchAdminData();
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -288,20 +335,44 @@ export default function SchedulesManagementPage() {
 
   const handleSaveNewBatch = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingBatch) return;
+
     if (!newBatchTitle || !newBatchTitle.trim()) {
       alert('Please enter a batch name');
       return;
     }
 
+    setIsSubmittingBatch(true);
+
     try {
       const batchStudents = students.filter(s => newBatchStudentIds.includes(s.id));
       const batchStudentNames = batchStudents.map(s => s.name);
+
+      const optimisticBatch: Batch = {
+        id: 'btch_opt_' + Date.now(),
+        name: newBatchTitle.trim(),
+        subject_name: subjectName,
+        grade_class: batchStudents[0]?.grade_class || '',
+        student_ids: newBatchStudentIds,
+        student_names: batchStudentNames,
+        created_at: new Date().toISOString(),
+      };
+
+      addBatchLocally(optimisticBatch);
+      setSelectedBatchId(optimisticBatch.id);
+      setBatchName(optimisticBatch.name);
+      if (optimisticBatch.student_ids && optimisticBatch.student_ids.length > 0) {
+        setSelectedStudentIds(optimisticBatch.student_ids);
+      }
+      setNewBatchTitle('');
+      setNewBatchStudentIds([]);
+      setNewBatchModalOpen(false);
 
       const res = await fetch('/api/admin/batches', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: newBatchTitle.trim(),
+          name: optimisticBatch.name,
           subject_name: subjectName,
           student_ids: newBatchStudentIds,
           student_names: batchStudentNames,
@@ -314,19 +385,17 @@ export default function SchedulesManagementPage() {
       }
 
       if (data.batch) {
+        deleteBatchLocally(optimisticBatch.id);
         addBatchLocally(data.batch);
         setSelectedBatchId(data.batch.id);
         setBatchName(data.batch.name);
-        if (data.batch.student_ids && data.batch.student_ids.length > 0) {
-          setSelectedStudentIds(data.batch.student_ids);
-        }
-        setNewBatchTitle('');
-        setNewBatchStudentIds([]);
-        setNewBatchModalOpen(false);
         refetchAdminData();
       }
     } catch (err: any) {
       alert(err.message || 'Error saving batch');
+      refetchAdminData();
+    } finally {
+      setIsSubmittingBatch(false);
     }
   };
 
@@ -829,14 +898,21 @@ export default function SchedulesManagementPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={isTimeInvalid}
-                  className={`py-2.5 px-5 font-extrabold text-xs rounded-xl shadow-md transition-all ${
-                    isTimeInvalid
+                  disabled={isTimeInvalid || isSubmitting}
+                  className={`py-2.5 px-5 font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center gap-2 ${
+                    isTimeInvalid || isSubmitting
                       ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
                       : 'bg-gold-accent hover:bg-gold-hover text-navy-dark'
                   }`}
                 >
-                  {editingSchedule ? 'Save & Update Schedule' : 'Schedule Class'}
+                  {isSubmitting ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-navy-dark border-t-transparent rounded-full animate-spin" />
+                      <span>{editingSchedule ? 'Updating...' : 'Scheduling...'}</span>
+                    </>
+                  ) : (
+                    <span>{editingSchedule ? 'Save & Update Schedule' : 'Schedule Class'}</span>
+                  )}
                 </button>
               </div>
             </form>
@@ -923,9 +999,17 @@ export default function SchedulesManagementPage() {
                 </button>
                 <button
                   type="submit"
-                  className="py-2.5 px-5 bg-navy-primary hover:bg-navy-dark text-white font-extrabold text-xs rounded-xl shadow-md"
+                  disabled={isSubmittingBatch}
+                  className="py-2.5 px-5 bg-navy-primary hover:bg-navy-dark text-white font-extrabold text-xs rounded-xl shadow-md flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Save Batch
+                  {isSubmittingBatch ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Saving Batch...</span>
+                    </>
+                  ) : (
+                    <span>Save Batch</span>
+                  )}
                 </button>
               </div>
             </form>

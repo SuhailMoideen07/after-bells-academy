@@ -41,21 +41,43 @@ export default function BatchesManagementPage() {
     setModalOpen(true);
   };
 
+  // Modal submission state
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const handleSaveBatch = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     if (!name || !name.trim()) {
       alert('Please enter a batch name');
       return;
     }
 
-    try {
-      const selectedStudents = students.filter(s => selectedStudentIds.includes(s.id));
-      const studentNames = selectedStudents.map(s => s.name);
+    setIsSubmitting(true);
+    const selectedStudents = students.filter(s => selectedStudentIds.includes(s.id));
+    const studentNames = selectedStudents.map(s => s.name);
+    const isEditing = Boolean(editingBatch);
+    const batchId = editingBatch?.id;
 
+    const optimisticBatch: Batch = {
+      id: isEditing ? batchId! : 'btch_opt_' + Date.now(),
+      name: name.trim(),
+      subject_name: editingBatch?.subject_name || '',
+      grade_class: selectedStudents[0]?.grade_class || editingBatch?.grade_class || '',
+      student_ids: selectedStudentIds,
+      student_names: studentNames,
+      created_at: new Date().toISOString(),
+    };
+
+    // INSTANT FEEDBACK: Add/update locally & close modal immediately!
+    addBatchLocally(optimisticBatch);
+    setModalOpen(false);
+
+    try {
       const url = '/api/admin/batches';
-      const method = editingBatch ? 'PUT' : 'POST';
+      const method = isEditing ? 'PUT' : 'POST';
       const payload = {
-        ...(editingBatch && { id: editingBatch.id }),
+        ...(isEditing && { id: batchId }),
         name: name.trim(),
         student_ids: selectedStudentIds,
         student_names: studentNames,
@@ -70,11 +92,17 @@ export default function BatchesManagementPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to save batch');
 
-      setModalOpen(false);
-      if (data.batch) addBatchLocally(data.batch);
+      if (data.batch) {
+        if (!isEditing) deleteBatchLocally(optimisticBatch.id);
+        addBatchLocally(data.batch);
+      }
       refetchAdminData();
     } catch (err: any) {
       alert(err.message || 'Error saving batch');
+      if (!isEditing) deleteBatchLocally(optimisticBatch.id);
+      refetchAdminData();
+    } finally {
+      setIsSubmitting(false);
     }
   };
 

@@ -72,10 +72,44 @@ export default function TeacherManagementPage() {
   const [activityStudents, setActivityStudents] = useState<Student[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
 
+  // Modal submission state
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const handleCreateTeacher = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
+    if (!name || !email || !password) {
+      alert('Please fill out all required fields');
+      return;
+    }
+
+    setIsSubmitting(true);
+    const subjects = subjectsStr.split(',').map(s => s.trim()).filter(Boolean);
+
+    const optimisticTeacher: Teacher = {
+      id: 'tch_opt_' + Date.now(),
+      user_id: 'usr_opt_' + Date.now(),
+      email,
+      name,
+      phone,
+      bio,
+      subjects,
+      assigned_student_count: 0,
+      status: 'active',
+      created_at: new Date().toISOString(),
+    };
+
+    // INSTANT FEEDBACK: Add locally & close modal immediately!
+    addTeacherLocally(optimisticTeacher);
+    setAddModalOpen(false);
+    setName('');
+    setEmail('');
+    setPhone('');
+    setPassword('');
+    setBio('');
+
     try {
-      const subjects = subjectsStr.split(',').map(s => s.trim()).filter(Boolean);
       const res = await fetch('/api/admin/teachers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -85,16 +119,17 @@ export default function TeacherManagementPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create teacher');
 
-      setAddModalOpen(false);
-      setName('');
-      setEmail('');
-      setPhone('');
-      setPassword('');
-      setBio('');
-      if (data.teacher) addTeacherLocally(data.teacher);
+      if (data.teacher) {
+        deleteTeacherLocally(optimisticTeacher.id);
+        addTeacherLocally(data.teacher);
+      }
       refetchAdminData();
     } catch (err: any) {
       alert(err.message || 'Error creating teacher');
+      deleteTeacherLocally(optimisticTeacher.id);
+      refetchAdminData();
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -110,15 +145,31 @@ export default function TeacherManagementPage() {
 
   const handleSaveEditTeacher = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedTeacher) return;
+    if (!selectedTeacher || isSubmitting) return;
+
+    setIsSubmitting(true);
+    const subjects = editSubjectsStr.split(',').map(s => s.trim()).filter(Boolean);
+    const teacherId = selectedTeacher.id;
+
+    const optimisticTeacher: Partial<Teacher> = {
+      name: editName,
+      email: editEmail,
+      phone: editPhone,
+      subjects,
+      bio: editBio,
+    };
+
+    // INSTANT FEEDBACK: Update locally & close modal immediately!
+    updateTeacherLocally(teacherId, optimisticTeacher);
+    setEditModalOpen(false);
+    setSelectedTeacher(null);
 
     try {
-      const subjects = editSubjectsStr.split(',').map(s => s.trim()).filter(Boolean);
       const res = await fetch('/api/admin/teachers', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          teacherId: selectedTeacher.id,
+          teacherId,
           name: editName,
           email: editEmail,
           phone: editPhone,
@@ -130,12 +181,13 @@ export default function TeacherManagementPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to update teacher');
 
-      setEditModalOpen(false);
-      setSelectedTeacher(null);
-      if (data.teacher) updateTeacherLocally(selectedTeacher.id, data.teacher);
+      if (data.teacher) updateTeacherLocally(teacherId, data.teacher);
       refetchAdminData();
     } catch (err: any) {
       alert(err.message || 'Error updating teacher');
+      refetchAdminData();
+    } finally {
+      setIsSubmitting(false);
     }
   };
 

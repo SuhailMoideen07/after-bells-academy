@@ -38,21 +38,50 @@ export default function StudentManagementPage() {
   const [editAssignedTeacherId, setEditAssignedTeacherId] = useState('');
   const [editSubjectsStr, setEditSubjectsStr] = useState('');
 
+  // Modal submission state
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     const teacherIdToAssign = assignedTeacherId || (teachers[0]?.id || '');
     if (!name || !guardianName || !phone || !teacherIdToAssign) {
       alert('Please fill out all required fields');
       return;
     }
 
+    setIsSubmitting(true);
+    const subjects = subjectsStr.split(',').map(s => s.trim()).filter(Boolean);
+    const assignedTeacherObj = teachers.find(t => t.id === teacherIdToAssign);
+
+    const optimisticStudent: Student = {
+      id: 'std_opt_' + Date.now(),
+      name,
+      grade_class: gradeClass,
+      board,
+      guardian_name: guardianName,
+      phone,
+      assigned_teacher_id: teacherIdToAssign,
+      assigned_teacher_name: assignedTeacherObj?.name || 'Unassigned',
+      subjects,
+      status: 'active',
+      created_at: new Date().toISOString(),
+    };
+
+    // INSTANT FEEDBACK: Add locally & close modal immediately!
+    addStudentLocally(optimisticStudent);
+    setAddModalOpen(false);
+    setName('');
+    setGuardianName('');
+    setPhone('');
+
     try {
-      const subjects = subjectsStr.split(',').map(s => s.trim()).filter(Boolean);
       const res = await fetch('/api/admin/students', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name,
+          name: optimisticStudent.name,
           grade_class: gradeClass,
           board,
           guardian_name: guardianName,
@@ -65,14 +94,17 @@ export default function StudentManagementPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to add student');
 
-      setAddModalOpen(false);
-      setName('');
-      setGuardianName('');
-      setPhone('');
-      if (data.student) addStudentLocally(data.student);
+      if (data.student) {
+        deleteStudentLocally(optimisticStudent.id);
+        addStudentLocally(data.student);
+      }
       refetchAdminData();
     } catch (err: any) {
       alert(err.message || 'Error adding student');
+      deleteStudentLocally(optimisticStudent.id);
+      refetchAdminData();
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -90,15 +122,35 @@ export default function StudentManagementPage() {
 
   const handleSaveEditStudent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedStudent) return;
+    if (!selectedStudent || isSubmitting) return;
+
+    setIsSubmitting(true);
+    const subjects = editSubjectsStr.split(',').map(s => s.trim()).filter(Boolean);
+    const assignedTeacherObj = teachers.find(t => t.id === editAssignedTeacherId);
+    const stdId = selectedStudent.id;
+
+    const optimisticStudent: Partial<Student> = {
+      name: editName,
+      grade_class: editGradeClass,
+      board: editBoard,
+      guardian_name: editGuardianName,
+      phone: editPhone,
+      assigned_teacher_id: editAssignedTeacherId,
+      assigned_teacher_name: assignedTeacherObj?.name || selectedStudent.assigned_teacher_name,
+      subjects,
+    };
+
+    // INSTANT FEEDBACK: Update locally & close modal immediately!
+    updateStudentLocally(stdId, optimisticStudent);
+    setEditModalOpen(false);
+    setSelectedStudent(null);
 
     try {
-      const subjects = editSubjectsStr.split(',').map(s => s.trim()).filter(Boolean);
       const res = await fetch('/api/admin/students', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          studentId: selectedStudent.id,
+          studentId: stdId,
           name: editName,
           grade_class: editGradeClass,
           board: editBoard,
@@ -112,12 +164,13 @@ export default function StudentManagementPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to update student');
 
-      setEditModalOpen(false);
-      setSelectedStudent(null);
-      if (data.student) updateStudentLocally(selectedStudent.id, data.student);
+      if (data.student) updateStudentLocally(stdId, data.student);
       refetchAdminData();
     } catch (err: any) {
       alert(err.message || 'Error updating student');
+      refetchAdminData();
+    } finally {
+      setIsSubmitting(false);
     }
   };
 

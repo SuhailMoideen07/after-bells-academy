@@ -54,10 +54,26 @@ export async function POST(request: Request) {
       }
     }
 
+    // Server-side deduplication check: verify if an identical schedule already exists
+    const existingSchedules = await db.getAllSchedules();
+    const targetStudentName = student_name || 'Student Batch';
+    const duplicate = existingSchedules.find(
+      s =>
+        s.teacher_id === teacher_id &&
+        s.date === date &&
+        s.start_time === start_time &&
+        s.end_time === end_time &&
+        s.subject_name === subject_name &&
+        ((batch_name && s.batch_name === batch_name) || s.student_name === targetStudentName)
+    );
+    if (duplicate) {
+      return NextResponse.json({ success: true, schedule: duplicate, duplicatePrevented: true });
+    }
+
     const newSchedule = await db.createSchedule({
       teacher_id,
       student_id: student_id || 'batch_grp',
-      student_name: student_name || 'Student Batch',
+      student_name: targetStudentName,
       student_names: Array.isArray(student_names) ? student_names : [],
       batch_name: batch_name || '',
       is_batch: Boolean(is_batch || (student_names && student_names.length > 1)),
