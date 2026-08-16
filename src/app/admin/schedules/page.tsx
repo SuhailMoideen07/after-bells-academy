@@ -542,7 +542,7 @@ export default function SchedulesManagementPage() {
 
                   return (
                     <tr key={sch.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="p-3.5 text-slate-800 font-bold whitespace-nowrap">{formatDateDDMMYYYY(sch.date)} ({sch.day_of_week})</td>
+                      <td className="p-3.5 text-slate-800 font-bold whitespace-nowrap">{formatDateDDMMYYYY(sch.date)} ({calculateDayTag(sch.date) || sch.day_of_week})</td>
                       <td className="p-3.5 text-slate-600 whitespace-nowrap">{formatTime12Hr(sch.start_time)} - {formatTime12Hr(sch.end_time)}</td>
                       <td className="p-3.5 text-navy-primary font-extrabold whitespace-nowrap">{sch.teacher_name}</td>
                       

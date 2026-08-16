@@ -2,6 +2,18 @@ import { NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { db } from '@/lib/db';
 
+function getDayOfWeekName(dateStr: string): string {
+  if (!dateStr) return 'Scheduled';
+  const parts = dateStr.split('T')[0].split('-').map(Number);
+  if (parts.length === 3) {
+    const [y, m, d] = parts;
+    const selectedDate = new Date(y, m - 1, d);
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    return days[selectedDate.getDay()] || 'Scheduled';
+  }
+  return 'Scheduled';
+}
+
 export async function GET() {
   const user = await getSessionUser();
   if (!user || user.role !== 'admin') {
@@ -79,7 +91,7 @@ export async function POST(request: Request) {
       is_batch: Boolean(is_batch || (student_names && student_names.length > 1)),
       subject_name,
       grade_class: grade_class || 'General',
-      day_of_week: day_of_week || 'Today',
+      day_of_week: (day_of_week && day_of_week !== 'Today') ? day_of_week : getDayOfWeekName(date),
       start_time,
       end_time,
       date,
