@@ -376,7 +376,13 @@ class JsonDatabaseManager {
 
   public getAllSchedules(): Schedule[] {
     this.reloadDiskData();
-    return this.data.schedules;
+    return [...this.data.schedules].sort((a, b) => {
+      const dateCompare = (b.date || '').localeCompare(a.date || '');
+      if (dateCompare !== 0) return dateCompare;
+      const timeCompare = (b.start_time || '').localeCompare(a.start_time || '');
+      if (timeCompare !== 0) return timeCompare;
+      return (b.id || '').localeCompare(a.id || '');
+    });
   }
 
   public clearAllSchedules(): void {
@@ -999,7 +1005,14 @@ export const db = {
 
   async getAllSchedules(): Promise<Schedule[]> {
     if (!isPrismaEnabled()) return jsonDb.getAllSchedules();
-    const list = await prisma.schedule.findMany({ include: { teacher: true } });
+    const list = await prisma.schedule.findMany({
+      include: { teacher: true },
+      orderBy: [
+        { date: 'desc' },
+        { startTime: 'desc' },
+        { id: 'desc' },
+      ],
+    });
     return list.map(s => ({
       id: s.id,
       teacher_id: s.teacherId,

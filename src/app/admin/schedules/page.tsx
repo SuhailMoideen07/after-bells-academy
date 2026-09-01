@@ -399,23 +399,33 @@ export default function SchedulesManagementPage() {
     }
   };
 
-  const filteredSchedules = schedules.filter(sch => {
-    if (search) {
-      const q = search.toLowerCase();
-      const matchTeacher = sch.teacher_name?.toLowerCase().includes(q);
-      const matchBatch = sch.batch_name?.toLowerCase().includes(q);
-      const matchSubject = sch.subject_name?.toLowerCase().includes(q);
-      const matchStudentName = sch.student_name?.toLowerCase().includes(q);
-      const matchStudents = sch.student_names?.some(s => s.toLowerCase().includes(q));
-      if (!matchTeacher && !matchBatch && !matchSubject && !matchStudentName && !matchStudents) {
-        return false;
-      }
-    }
-    if (selectedTeacher && sch.teacher_id !== selectedTeacher) return false;
-    if (selectedBatch && sch.batch_name !== selectedBatch) return false;
-    if (selectedStatus && sch.status !== selectedStatus) return false;
-    return true;
-  });
+  const filteredSchedules = useMemo(() => {
+    return schedules
+      .filter(sch => {
+        if (search) {
+          const q = search.toLowerCase();
+          const matchTeacher = sch.teacher_name?.toLowerCase().includes(q);
+          const matchBatch = sch.batch_name?.toLowerCase().includes(q);
+          const matchSubject = sch.subject_name?.toLowerCase().includes(q);
+          const matchStudentName = sch.student_name?.toLowerCase().includes(q);
+          const matchStudents = sch.student_names?.some(s => s.toLowerCase().includes(q));
+          if (!matchTeacher && !matchBatch && !matchSubject && !matchStudentName && !matchStudents) {
+            return false;
+          }
+        }
+        if (selectedTeacher && sch.teacher_id !== selectedTeacher) return false;
+        if (selectedBatch && sch.batch_name !== selectedBatch) return false;
+        if (selectedStatus && sch.status !== selectedStatus) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const dateCompare = (b.date || '').localeCompare(a.date || '');
+        if (dateCompare !== 0) return dateCompare;
+        const timeCompare = (b.start_time || '').localeCompare(a.start_time || '');
+        if (timeCompare !== 0) return timeCompare;
+        return (b.id || '').localeCompare(a.id || '');
+      });
+  }, [schedules, search, selectedTeacher, selectedBatch, selectedStatus]);
 
   const visibleStudents = useMemo(() => {
     if (!selectedBatchId) return students;
