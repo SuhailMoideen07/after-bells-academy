@@ -1731,6 +1731,9 @@ export const db = {
       return `${y}-${m}-${day}`;
     };
 
+    const newPrismaRecords: any[] = [];
+    const newJsonRecords: any[] = [];
+
     while (cursor <= endDate) {
       if (targetDayNums.includes(cursor.getDay())) {
         const dateStr = formatDate(cursor);
@@ -1739,27 +1742,58 @@ export const db = {
         if (existingKeys.has(key)) {
           skipped++;
         } else {
-          await this.createSchedule({
-            teacher_id: template.teacher_id,
-            teacher_name: template.teacher_name,
-            student_id: template.student_id,
-            student_name: displayStudentName,
-            student_names: template.student_names || [],
-            is_batch: template.is_batch,
-            batch_name: template.batch_name,
-            subject_name: template.subject_name,
-            grade_class: template.grade_class,
-            day_of_week: getDayOfWeekName(cursor),
-            start_time: template.start_time,
-            end_time: template.end_time,
-            date: dateStr,
-            status: 'scheduled',
-          });
+          const id = 'sch_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9) + '_' + created;
+          if (isPrismaEnabled()) {
+            newPrismaRecords.push({
+              id,
+              teacherId: template.teacher_id,
+              studentId: template.student_id,
+              studentName: displayStudentName,
+              studentNames: template.student_names || [],
+              isBatch: Boolean(template.is_batch),
+              batchName: template.batch_name || null,
+              subjectName: template.subject_name,
+              gradeClass: template.grade_class,
+              dayOfWeek: getDayOfWeekName(cursor),
+              startTime: template.start_time,
+              endTime: template.end_time,
+              date: dateStr,
+              status: ScheduleStatus.scheduled,
+            });
+          } else {
+            newJsonRecords.push({
+              teacher_id: template.teacher_id,
+              teacher_name: template.teacher_name,
+              student_id: template.student_id,
+              student_name: displayStudentName,
+              student_names: template.student_names || [],
+              is_batch: template.is_batch,
+              batch_name: template.batch_name,
+              subject_name: template.subject_name,
+              grade_class: template.grade_class,
+              day_of_week: getDayOfWeekName(cursor),
+              start_time: template.start_time,
+              end_time: template.end_time,
+              date: dateStr,
+              status: 'scheduled',
+            });
+          }
           existingKeys.add(key);
           created++;
         }
       }
       cursor.setDate(cursor.getDate() + 1);
+    }
+
+    if (newPrismaRecords.length > 0) {
+      await prisma.schedule.createMany({
+        data: newPrismaRecords,
+        skipDuplicates: true,
+      });
+    } else if (newJsonRecords.length > 0) {
+      for (const rec of newJsonRecords) {
+        jsonDb.createSchedule(rec);
+      }
     }
 
     return { created, skipped };
