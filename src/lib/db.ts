@@ -1521,61 +1521,71 @@ export const db = {
 
   async getAllScheduleTemplates(): Promise<ScheduleTemplate[]> {
     if (!isPrismaEnabled()) return jsonDb.getAllScheduleTemplates();
-    const list = await prisma.scheduleTemplate.findMany({
-      include: { teacher: true },
-      orderBy: { createdAt: 'desc' },
-    });
-    return list.map(t => ({
-      id: t.id,
-      teacher_id: t.teacherId,
-      teacher_name: t.teacher ? t.teacher.name : 'Teacher',
-      student_id: t.studentId,
-      student_name: t.studentName || undefined,
-      student_names: t.studentNames,
-      is_batch: t.isBatch,
-      batch_name: t.batchName || undefined,
-      subject_name: t.subjectName,
-      grade_class: t.gradeClass,
-      days_of_week: t.daysOfWeek as TemplateDay[],
-      start_time: t.startTime,
-      end_time: t.endTime,
-      active_from: t.activeFrom,
-      active_until: t.activeUntil,
-      is_active: t.isActive,
-      last_generated_at: t.lastGeneratedAt ? t.lastGeneratedAt.toISOString() : undefined,
-      last_generated_count: t.lastGeneratedCount,
-      created_at: t.createdAt.toISOString(),
-    }));
+    try {
+      const list = await prisma.scheduleTemplate.findMany({
+        include: { teacher: true },
+        orderBy: { createdAt: 'desc' },
+      });
+      return list.map(t => ({
+        id: t.id,
+        teacher_id: t.teacherId,
+        teacher_name: t.teacher ? t.teacher.name : 'Teacher',
+        student_id: t.studentId,
+        student_name: t.studentName || undefined,
+        student_names: t.studentNames,
+        is_batch: t.isBatch,
+        batch_name: t.batchName || undefined,
+        subject_name: t.subjectName,
+        grade_class: t.gradeClass,
+        days_of_week: t.daysOfWeek as TemplateDay[],
+        start_time: t.startTime,
+        end_time: t.endTime,
+        active_from: t.activeFrom,
+        active_until: t.activeUntil,
+        is_active: t.isActive,
+        last_generated_at: t.lastGeneratedAt ? t.lastGeneratedAt.toISOString() : undefined,
+        last_generated_count: t.lastGeneratedCount,
+        created_at: t.createdAt.toISOString(),
+      }));
+    } catch (err) {
+      console.warn('getAllScheduleTemplates prisma error, falling back to JSON db:', err);
+      return jsonDb.getAllScheduleTemplates();
+    }
   },
 
   async getScheduleTemplateById(id: string): Promise<ScheduleTemplate | undefined> {
     if (!isPrismaEnabled()) return jsonDb.getScheduleTemplateById(id);
-    const t = await prisma.scheduleTemplate.findUnique({
-      where: { id },
-      include: { teacher: true },
-    });
-    if (!t) return undefined;
-    return {
-      id: t.id,
-      teacher_id: t.teacherId,
-      teacher_name: t.teacher ? t.teacher.name : 'Teacher',
-      student_id: t.studentId,
-      student_name: t.studentName || undefined,
-      student_names: t.studentNames,
-      is_batch: t.isBatch,
-      batch_name: t.batchName || undefined,
-      subject_name: t.subjectName,
-      grade_class: t.gradeClass,
-      days_of_week: t.daysOfWeek as TemplateDay[],
-      start_time: t.startTime,
-      end_time: t.endTime,
-      active_from: t.activeFrom,
-      active_until: t.activeUntil,
-      is_active: t.isActive,
-      last_generated_at: t.lastGeneratedAt ? t.lastGeneratedAt.toISOString() : undefined,
-      last_generated_count: t.lastGeneratedCount,
-      created_at: t.createdAt.toISOString(),
-    };
+    try {
+      const t = await prisma.scheduleTemplate.findUnique({
+        where: { id },
+        include: { teacher: true },
+      });
+      if (!t) return undefined;
+      return {
+        id: t.id,
+        teacher_id: t.teacherId,
+        teacher_name: t.teacher ? t.teacher.name : 'Teacher',
+        student_id: t.studentId,
+        student_name: t.studentName || undefined,
+        student_names: t.studentNames,
+        is_batch: t.isBatch,
+        batch_name: t.batchName || undefined,
+        subject_name: t.subjectName,
+        grade_class: t.gradeClass,
+        days_of_week: t.daysOfWeek as TemplateDay[],
+        start_time: t.startTime,
+        end_time: t.endTime,
+        active_from: t.activeFrom,
+        active_until: t.activeUntil,
+        is_active: t.isActive,
+        last_generated_at: t.lastGeneratedAt ? t.lastGeneratedAt.toISOString() : undefined,
+        last_generated_count: t.lastGeneratedCount,
+        created_at: t.createdAt.toISOString(),
+      };
+    } catch (err) {
+      console.warn('getScheduleTemplateById prisma error, falling back to JSON db:', err);
+      return jsonDb.getScheduleTemplateById(id);
+    }
   },
 
   async createScheduleTemplate(params: Omit<ScheduleTemplate, 'id' | 'created_at'>): Promise<ScheduleTemplate> {

@@ -11,12 +11,12 @@ export async function GET() {
     }
 
     const [teachers, students, batches, schedules, logs, scheduleTemplates] = await Promise.all([
-      db.getAllTeachers(),
-      db.getAllStudents(),
-      db.getAllBatches(),
-      db.getAllSchedules(),
-      db.getAllClassLogs(),
-      db.getAllScheduleTemplates(),
+      db.getAllTeachers().catch(e => { console.error('Bootstrap getAllTeachers error:', e); return []; }),
+      db.getAllStudents().catch(e => { console.error('Bootstrap getAllStudents error:', e); return []; }),
+      db.getAllBatches().catch(e => { console.error('Bootstrap getAllBatches error:', e); return []; }),
+      db.getAllSchedules().catch(e => { console.error('Bootstrap getAllSchedules error:', e); return []; }),
+      db.getAllClassLogs().catch(e => { console.error('Bootstrap getAllClassLogs error:', e); return []; }),
+      db.getAllScheduleTemplates().catch(e => { console.error('Bootstrap getAllScheduleTemplates error:', e); return []; }),
     ]);
 
     const recentLogs = logs.slice(0, 15);
