@@ -31,33 +31,31 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Class session is already finalized' }, { status: 400 });
     }
 
-    // Persist cancellation to database
-    const updatedSchedule = await db.updateSchedule(schedule.id, {
-      status: 'cancelled',
-    }, { isAdminReschedule: false });
-
-    const teacherObj = await db.getTeacherById(schedule.teacher_id);
-    const studentObj = await db.getStudentById(schedule.student_id);
-
-    const newLog = await db.createClassLog({
-      schedule_id: schedule.id,
-      teacher_id: schedule.teacher_id,
-      teacher_name: teacherObj ? teacherObj.name : schedule.teacher_name || 'Teacher',
-      student_id: schedule.student_id,
-      student_name: studentObj ? studentObj.name : schedule.student_name || 'Student',
-      student_names: schedule.student_names || [],
-      is_batch: schedule.is_batch,
-      batch_name: schedule.batch_name,
-      subject_name: schedule.subject_name,
-      grade_class: schedule.grade_class,
-      date: schedule.date || getTodayFormatted(),
-      start_time: schedule.start_time,
-      end_time: schedule.end_time,
-      duration_minutes: 0,
-      status: 'cancelled',
-      cancelled_reason: reason,
-      remarks: remarks ? String(remarks).trim() : '',
-    });
+    // Persist cancellation and create log in parallel
+    const [updatedSchedule, newLog] = await Promise.all([
+      db.updateSchedule(schedule.id, {
+        status: 'cancelled',
+      }, { isAdminReschedule: false }),
+      db.createClassLog({
+        schedule_id: schedule.id,
+        teacher_id: schedule.teacher_id,
+        teacher_name: schedule.teacher_name || (teacher ? teacher.name : 'Teacher'),
+        student_id: schedule.student_id,
+        student_name: schedule.student_name || 'Student',
+        student_names: schedule.student_names || [],
+        is_batch: schedule.is_batch,
+        batch_name: schedule.batch_name,
+        subject_name: schedule.subject_name,
+        grade_class: schedule.grade_class,
+        date: schedule.date || getTodayFormatted(),
+        start_time: schedule.start_time,
+        end_time: schedule.end_time,
+        duration_minutes: 0,
+        status: 'cancelled',
+        cancelled_reason: reason,
+        remarks: remarks ? String(remarks).trim() : '',
+      }),
+    ]);
 
     return NextResponse.json({
       success: true,

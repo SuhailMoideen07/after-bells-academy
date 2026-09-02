@@ -124,3 +124,27 @@ export interface AdminAnalytics {
   classesCancelled: number;
   monthlyTeachingHours: number;
 }
+
+export type TemplateDay = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
+
+export interface ScheduleTemplate {
+  id: string;
+  teacher_id: string;
+  teacher_name?: string;
+  student_id: string;
+  student_name?: string;
+  student_names?: string[];
+  is_batch?: boolean;
+  batch_name?: string;
+  subject_name: string;
+  grade_class: string;
+  days_of_week: TemplateDay[];   // e.g. ['Monday', 'Wednesday', 'Friday']
+  start_time: string;            // e.g. '16:00'
+  end_time: string;              // e.g. '17:00'
+  active_from: string;           // YYYY-MM-DD
+  active_until: string;          // YYYY-MM-DD
+  is_active: boolean;
+  created_at: string;
+  last_generated_at?: string;
+  last_generated_count?: number;
+}

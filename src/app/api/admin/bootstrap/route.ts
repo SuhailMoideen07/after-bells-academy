@@ -10,12 +10,13 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized: Admin access required' }, { status: 403 });
     }
 
-    const [teachers, students, batches, schedules, logs] = await Promise.all([
+    const [teachers, students, batches, schedules, logs, scheduleTemplates] = await Promise.all([
       db.getAllTeachers(),
       db.getAllStudents(),
       db.getAllBatches(),
       db.getAllSchedules(),
       db.getAllClassLogs(),
+      db.getAllScheduleTemplates(),
     ]);
 
     const recentLogs = logs.slice(0, 15);
@@ -51,6 +52,7 @@ export async function GET() {
       students,
       batches,
       schedules,
+      scheduleTemplates,
       recentLogs,
       todaySchedules,
       analytics,

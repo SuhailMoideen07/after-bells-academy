@@ -15,6 +15,8 @@ import type {
   TeacherStats,
   AdminAnalytics,
   Batch,
+  ScheduleTemplate,
+  TemplateDay,
 } from '@/types/tms';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -29,6 +31,7 @@ export interface DatabaseSchema {
   schedules: Schedule[];
   classLogs: ClassLog[];
   notifications: NotificationItem[];
+  scheduleTemplates: ScheduleTemplate[];
 }
 
 export function hashPasswordSimple(password: string): string {
@@ -111,6 +114,7 @@ class JsonDatabaseManager {
         schedules: [],
         classLogs: [],
         notifications: [],
+        scheduleTemplates: [],
       };
       this.passwords = { 'usr_admin': hashPasswordSimple('Admin@AfterBells2026') };
       this.saveToFile(initial, this.passwords);
@@ -132,10 +136,11 @@ class JsonDatabaseManager {
         schedules: parsed.schedules || [],
         classLogs: parsed.classLogs || [],
         notifications: parsed.notifications || [],
+        scheduleTemplates: parsed.scheduleTemplates || [],
       };
     } catch (err) {
       console.error('Failed to parse academy_db.json fallback.', err);
-      return { users: [], teachers: [], students: [], subjects: DEFAULT_SUBJECTS, batches: DEFAULT_BATCHES, schedules: [], classLogs: [], notifications: [] };
+      return { users: [], teachers: [], students: [], subjects: DEFAULT_SUBJECTS, batches: DEFAULT_BATCHES, schedules: [], classLogs: [], notifications: [], scheduleTemplates: [] };
     }
   }
 
@@ -536,6 +541,58 @@ class JsonDatabaseManager {
       classesCancelled: cancelledLogs.length,
       monthlyTeachingHours,
     };
+  }
+
+  // --- Schedule Template Methods (JSON fallback) ---
+
+  public getAllScheduleTemplates(): ScheduleTemplate[] {
+    this.reloadDiskData();
+    return (this.data.scheduleTemplates || []).sort((a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }
+
+  public createScheduleTemplate(params: Omit<ScheduleTemplate, 'id' | 'created_at'>): ScheduleTemplate {
+    const id = 'tpl_' + Date.now();
+    const template: ScheduleTemplate = {
+      ...params,
+      id,
+      created_at: new Date().toISOString(),
+    };
+    if (!this.data.scheduleTemplates) this.data.scheduleTemplates = [];
+    this.data.scheduleTemplates.unshift(template);
+    this.saveToFile();
+    return template;
+  }
+
+  public getScheduleTemplateById(id: string): ScheduleTemplate | undefined {
+    this.reloadDiskData();
+    return (this.data.scheduleTemplates || []).find(t => t.id === id);
+  }
+
+  public updateScheduleTemplate(id: string, updates: Partial<ScheduleTemplate>): ScheduleTemplate | undefined {
+    if (!this.data.scheduleTemplates) return undefined;
+    const tpl = this.data.scheduleTemplates.find(t => t.id === id);
+    if (!tpl) return undefined;
+    Object.assign(tpl, updates);
+    this.saveToFile();
+    return tpl;
+  }
+
+  public deleteScheduleTemplate(id: string): boolean {
+    if (!this.data.scheduleTemplates) return false;
+    const idx = this.data.scheduleTemplates.findIndex(t => t.id === id);
+    if (idx === -1) return false;
+    this.data.scheduleTemplates.splice(idx, 1);
+    this.saveToFile();
+    return true;
+  }
+
+  public deleteScheduleTemplateSchedules(templateId: string): number {
+    // We track template-generated schedules by a tag; simplest approach is
+    // to delete all future 'scheduled' entries that match the template's config.
+    // This is a best-effort cleanup for JSON mode.
+    return 0; // JSON mode: no-op (admin can manually manage)
   }
 }
 
@@ -1170,9 +1227,56 @@ export const db = {
 
   async updateSchedule(id: string, updates: Partial<Schedule>, options?: { isAdminReschedule?: boolean }): Promise<Schedule | undefined> {
     if (!isPrismaEnabled()) return jsonDb.updateSchedule(id, updates, options);
+    const isReschedule = options?.isAdminReschedule !== false;
+
+    if (!isReschedule) {
+      const s = await prisma.schedule.update({
+        where: { id },
+        data: {
+          ...(updates.start_time !== undefined && { startTime: updates.start_time }),
+          ...(updates.end_time !== undefined && { endTime: updates.end_time }),
+          ...(updates.date !== undefined && { date: updates.date }),
+          ...(updates.teacher_id !== undefined && { teacherId: updates.teacher_id }),
+          ...(updates.student_id !== undefined && { studentId: updates.student_id }),
+          ...(updates.student_name !== undefined && { studentName: updates.student_name }),
+          ...(updates.student_names !== undefined && { studentNames: updates.student_names }),
+          ...(updates.is_batch !== undefined && { isBatch: updates.is_batch }),
+          ...(updates.batch_name !== undefined && { batchName: updates.batch_name }),
+          ...(updates.subject_name !== undefined && { subjectName: updates.subject_name }),
+          ...(updates.grade_class !== undefined && { gradeClass: updates.grade_class }),
+          ...(updates.day_of_week !== undefined && { dayOfWeek: updates.day_of_week }),
+          ...(updates.status !== undefined && {
+            status: updates.status === 'in_progress' ? ScheduleStatus.in_progress :
+                    updates.status === 'completed' ? ScheduleStatus.completed :
+                    updates.status === 'cancelled' ? ScheduleStatus.cancelled : ScheduleStatus.scheduled
+          }),
+        },
+        include: { teacher: true },
+      });
+
+      return {
+        id: s.id,
+        teacher_id: s.teacherId,
+        teacher_name: s.teacher ? s.teacher.name : 'Unknown Teacher',
+        student_id: s.studentId,
+        student_name: s.studentName || undefined,
+        student_names: s.studentNames,
+        is_batch: s.isBatch,
+        batch_name: s.batchName || undefined,
+        subject_name: s.subjectName,
+        grade_class: s.gradeClass,
+        day_of_week: s.dayOfWeek,
+        start_time: s.startTime,
+        end_time: s.endTime,
+        date: s.date,
+        status: s.status as any,
+        is_rescheduled: s.isRescheduled,
+        rescheduled_at: s.rescheduledAt ? s.rescheduledAt.toISOString() : undefined,
+      };
+    }
+
     const sch = await this.getScheduleById(id);
     if (!sch) return undefined;
-    const isReschedule = options?.isAdminReschedule !== false;
 
     const teacherId = updates.teacher_id || sch.teacher_id;
     const teacher = await prisma.teacher.findUnique({ where: { id: teacherId } });
@@ -1197,11 +1301,12 @@ export const db = {
                   updates.status === 'completed' ? ScheduleStatus.completed :
                   updates.status === 'cancelled' ? ScheduleStatus.cancelled : ScheduleStatus.scheduled
         }),
-        ...(isReschedule && { isRescheduled: true, rescheduledAt: new Date() }),
+        isRescheduled: true,
+        rescheduledAt: new Date(),
       },
     });
 
-    if (isReschedule && teacher && teacher.userId) {
+    if (teacher && teacher.userId) {
       const targetName = s.batchName || s.studentName || 'Student';
       await prisma.notificationItem.create({
         data: {
@@ -1410,5 +1515,243 @@ export const db = {
       classesCancelled: cancelledLogs.length,
       monthlyTeachingHours,
     };
+  },
+
+  // --- Schedule Template Methods (Prisma + JSON) ---
+
+  async getAllScheduleTemplates(): Promise<ScheduleTemplate[]> {
+    if (!isPrismaEnabled()) return jsonDb.getAllScheduleTemplates();
+    const list = await prisma.scheduleTemplate.findMany({
+      include: { teacher: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    return list.map(t => ({
+      id: t.id,
+      teacher_id: t.teacherId,
+      teacher_name: t.teacher ? t.teacher.name : 'Teacher',
+      student_id: t.studentId,
+      student_name: t.studentName || undefined,
+      student_names: t.studentNames,
+      is_batch: t.isBatch,
+      batch_name: t.batchName || undefined,
+      subject_name: t.subjectName,
+      grade_class: t.gradeClass,
+      days_of_week: t.daysOfWeek as TemplateDay[],
+      start_time: t.startTime,
+      end_time: t.endTime,
+      active_from: t.activeFrom,
+      active_until: t.activeUntil,
+      is_active: t.isActive,
+      last_generated_at: t.lastGeneratedAt ? t.lastGeneratedAt.toISOString() : undefined,
+      last_generated_count: t.lastGeneratedCount,
+      created_at: t.createdAt.toISOString(),
+    }));
+  },
+
+  async getScheduleTemplateById(id: string): Promise<ScheduleTemplate | undefined> {
+    if (!isPrismaEnabled()) return jsonDb.getScheduleTemplateById(id);
+    const t = await prisma.scheduleTemplate.findUnique({
+      where: { id },
+      include: { teacher: true },
+    });
+    if (!t) return undefined;
+    return {
+      id: t.id,
+      teacher_id: t.teacherId,
+      teacher_name: t.teacher ? t.teacher.name : 'Teacher',
+      student_id: t.studentId,
+      student_name: t.studentName || undefined,
+      student_names: t.studentNames,
+      is_batch: t.isBatch,
+      batch_name: t.batchName || undefined,
+      subject_name: t.subjectName,
+      grade_class: t.gradeClass,
+      days_of_week: t.daysOfWeek as TemplateDay[],
+      start_time: t.startTime,
+      end_time: t.endTime,
+      active_from: t.activeFrom,
+      active_until: t.activeUntil,
+      is_active: t.isActive,
+      last_generated_at: t.lastGeneratedAt ? t.lastGeneratedAt.toISOString() : undefined,
+      last_generated_count: t.lastGeneratedCount,
+      created_at: t.createdAt.toISOString(),
+    };
+  },
+
+  async createScheduleTemplate(params: Omit<ScheduleTemplate, 'id' | 'created_at'>): Promise<ScheduleTemplate> {
+    if (!isPrismaEnabled()) return jsonDb.createScheduleTemplate(params);
+    const id = 'tpl_' + Date.now();
+    const teacher = await prisma.teacher.findUnique({ where: { id: params.teacher_id } });
+    const t = await prisma.scheduleTemplate.create({
+      data: {
+        id,
+        teacherId: params.teacher_id,
+        studentId: params.student_id,
+        studentName: params.student_name || null,
+        studentNames: params.student_names || [],
+        isBatch: Boolean(params.is_batch),
+        batchName: params.batch_name || null,
+        subjectName: params.subject_name,
+        gradeClass: params.grade_class,
+        daysOfWeek: params.days_of_week,
+        startTime: params.start_time,
+        endTime: params.end_time,
+        activeFrom: params.active_from,
+        activeUntil: params.active_until,
+        isActive: params.is_active,
+        lastGeneratedCount: params.last_generated_count || 0,
+      },
+    });
+    return {
+      id: t.id,
+      teacher_id: t.teacherId,
+      teacher_name: teacher ? teacher.name : 'Teacher',
+      student_id: t.studentId,
+      student_name: t.studentName || undefined,
+      student_names: t.studentNames,
+      is_batch: t.isBatch,
+      batch_name: t.batchName || undefined,
+      subject_name: t.subjectName,
+      grade_class: t.gradeClass,
+      days_of_week: t.daysOfWeek as TemplateDay[],
+      start_time: t.startTime,
+      end_time: t.endTime,
+      active_from: t.activeFrom,
+      active_until: t.activeUntil,
+      is_active: t.isActive,
+      last_generated_count: t.lastGeneratedCount,
+      created_at: t.createdAt.toISOString(),
+    };
+  },
+
+  async updateScheduleTemplate(id: string, updates: Partial<ScheduleTemplate>): Promise<ScheduleTemplate | undefined> {
+    if (!isPrismaEnabled()) return jsonDb.updateScheduleTemplate(id, updates);
+    const t = await prisma.scheduleTemplate.update({
+      where: { id },
+      data: {
+        ...(updates.is_active !== undefined && { isActive: updates.is_active }),
+        ...(updates.active_from !== undefined && { activeFrom: updates.active_from }),
+        ...(updates.active_until !== undefined && { activeUntil: updates.active_until }),
+        ...(updates.last_generated_at !== undefined && { lastGeneratedAt: updates.last_generated_at ? new Date(updates.last_generated_at) : null }),
+        ...(updates.last_generated_count !== undefined && { lastGeneratedCount: updates.last_generated_count }),
+        ...(updates.teacher_id !== undefined && { teacherId: updates.teacher_id }),
+        ...(updates.student_id !== undefined && { studentId: updates.student_id }),
+        ...(updates.student_name !== undefined && { studentName: updates.student_name }),
+        ...(updates.student_names !== undefined && { studentNames: updates.student_names }),
+        ...(updates.is_batch !== undefined && { isBatch: updates.is_batch }),
+        ...(updates.batch_name !== undefined && { batchName: updates.batch_name }),
+        ...(updates.subject_name !== undefined && { subjectName: updates.subject_name }),
+        ...(updates.grade_class !== undefined && { gradeClass: updates.grade_class }),
+        ...(updates.days_of_week !== undefined && { daysOfWeek: updates.days_of_week }),
+        ...(updates.start_time !== undefined && { startTime: updates.start_time }),
+        ...(updates.end_time !== undefined && { endTime: updates.end_time }),
+      },
+      include: { teacher: true },
+    });
+    return {
+      id: t.id,
+      teacher_id: t.teacherId,
+      teacher_name: t.teacher ? t.teacher.name : 'Teacher',
+      student_id: t.studentId,
+      student_name: t.studentName || undefined,
+      student_names: t.studentNames,
+      is_batch: t.isBatch,
+      batch_name: t.batchName || undefined,
+      subject_name: t.subjectName,
+      grade_class: t.gradeClass,
+      days_of_week: t.daysOfWeek as TemplateDay[],
+      start_time: t.startTime,
+      end_time: t.endTime,
+      active_from: t.activeFrom,
+      active_until: t.activeUntil,
+      is_active: t.isActive,
+      last_generated_at: t.lastGeneratedAt ? t.lastGeneratedAt.toISOString() : undefined,
+      last_generated_count: t.lastGeneratedCount,
+      created_at: t.createdAt.toISOString(),
+    };
+  },
+
+  async deleteScheduleTemplate(id: string): Promise<boolean> {
+    if (!isPrismaEnabled()) return jsonDb.deleteScheduleTemplate(id);
+    await prisma.scheduleTemplate.delete({ where: { id } });
+    return true;
+  },
+
+  // Core generation engine — creates Schedule rows from a template
+  async generateFromTemplate(
+    template: ScheduleTemplate,
+    existingSchedules: Schedule[]
+  ): Promise<{ created: number; skipped: number }> {
+    const DAY_MAP: Record<string, number> = {
+      Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3,
+      Thursday: 4, Friday: 5, Saturday: 6,
+    };
+
+    const targetDayNums = template.days_of_week.map(d => DAY_MAP[d] ?? -1).filter(n => n >= 0);
+
+    // Build a dedup set from existing schedules
+    const existingKeys = new Set(
+      existingSchedules.map(s =>
+        `${s.teacher_id}|${s.date}|${s.start_time}|${s.end_time}|${s.subject_name}|${s.student_name || s.batch_name || ''}`
+      )
+    );
+
+    const [fromY, fromM, fromD] = template.active_from.split('-').map(Number);
+    const [untilY, untilM, untilD] = template.active_until.split('-').map(Number);
+    const startDate = new Date(fromY, fromM - 1, fromD);
+    const endDate = new Date(untilY, untilM - 1, untilD);
+
+    let created = 0;
+    let skipped = 0;
+    const cursor = new Date(startDate);
+
+    const displayStudentName = template.batch_name
+      ? template.batch_name
+      : template.student_name || 'Student';
+
+    const getDayOfWeekName = (d: Date) => {
+      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      return days[d.getDay()];
+    };
+
+    const formatDate = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+
+    while (cursor <= endDate) {
+      if (targetDayNums.includes(cursor.getDay())) {
+        const dateStr = formatDate(cursor);
+        const key = `${template.teacher_id}|${dateStr}|${template.start_time}|${template.end_time}|${template.subject_name}|${displayStudentName}`;
+
+        if (existingKeys.has(key)) {
+          skipped++;
+        } else {
+          await this.createSchedule({
+            teacher_id: template.teacher_id,
+            teacher_name: template.teacher_name,
+            student_id: template.student_id,
+            student_name: displayStudentName,
+            student_names: template.student_names || [],
+            is_batch: template.is_batch,
+            batch_name: template.batch_name,
+            subject_name: template.subject_name,
+            grade_class: template.grade_class,
+            day_of_week: getDayOfWeekName(cursor),
+            start_time: template.start_time,
+            end_time: template.end_time,
+            date: dateStr,
+            status: 'scheduled',
+          });
+          existingKeys.add(key);
+          created++;
+        }
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    return { created, skipped };
   },
 };

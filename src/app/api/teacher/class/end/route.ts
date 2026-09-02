@@ -55,34 +55,31 @@ export async function POST(request: Request) {
       }
     }
 
-    // Update schedule — persist end_time and status to database
-    const finalSchedule = await db.updateSchedule(schedule.id, {
-      end_time: endTimeStr,
-      status: 'completed',
-    }, { isAdminReschedule: false });
-
-    // Create immutable class log
-    const teacherObj = await db.getTeacherById(schedule.teacher_id);
-    const studentObj = await db.getStudentById(schedule.student_id);
-
-    const newLog = await db.createClassLog({
-      schedule_id: schedule.id,
-      teacher_id: schedule.teacher_id,
-      teacher_name: teacherObj ? teacherObj.name : schedule.teacher_name || 'Teacher',
-      student_id: schedule.student_id,
-      student_name: studentObj ? studentObj.name : schedule.student_name || 'Student',
-      student_names: schedule.student_names || [],
-      is_batch: schedule.is_batch,
-      batch_name: schedule.batch_name,
-      subject_name: schedule.subject_name,
-      grade_class: schedule.grade_class,
-      date: schedule.date || getTodayFormatted(),
-      start_time: schedule.start_time,
-      end_time: endTimeStr,
-      duration_minutes: durationMinutes,
-      status: 'completed',
-      remarks: remarks ? String(remarks).trim() : 'Class completed successfully.',
-    });
+    // Update schedule and create immutable class log in parallel
+    const [finalSchedule, newLog] = await Promise.all([
+      db.updateSchedule(schedule.id, {
+        end_time: endTimeStr,
+        status: 'completed',
+      }, { isAdminReschedule: false }),
+      db.createClassLog({
+        schedule_id: schedule.id,
+        teacher_id: schedule.teacher_id,
+        teacher_name: schedule.teacher_name || (teacher ? teacher.name : 'Teacher'),
+        student_id: schedule.student_id,
+        student_name: schedule.student_name || 'Student',
+        student_names: schedule.student_names || [],
+        is_batch: schedule.is_batch,
+        batch_name: schedule.batch_name,
+        subject_name: schedule.subject_name,
+        grade_class: schedule.grade_class,
+        date: schedule.date || getTodayFormatted(),
+        start_time: schedule.start_time,
+        end_time: endTimeStr,
+        duration_minutes: durationMinutes,
+        status: 'completed',
+        remarks: remarks ? String(remarks).trim() : 'Class completed successfully.',
+      }),
+    ]);
 
     return NextResponse.json({
       success: true,

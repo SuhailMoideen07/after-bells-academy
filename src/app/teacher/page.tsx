@@ -310,9 +310,20 @@ export default function TeacherDashboardPage() {
     }
   };
 
-  // Class Actions
+  // Class Actions with Instant Optimistic UI Updates
   const handleStartClass = async (schedule: Schedule) => {
-    setActionLoading(true);
+    const previousSchedules = [...schedules];
+    
+    // 1. Instant optimistic update
+    setSchedules(prev =>
+      prev.map(s =>
+        s.id === schedule.id
+          ? { ...s, status: 'in_progress' }
+          : s
+      )
+    );
+
+    // 2. Perform API call in background
     try {
       const res = await fetch('/api/teacher/class/start', {
         method: 'POST',
@@ -322,11 +333,14 @@ export default function TeacherDashboardPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to start class');
 
-      await fetchDashboardData();
+      if (data.schedule) {
+        setSchedules(prev => prev.map(s => s.id === data.schedule.id ? data.schedule : s));
+      }
+      fetchDashboardData(true);
     } catch (err: any) {
+      console.error('Error starting class:', err);
+      setSchedules(previousSchedules);
       alert(err.message || 'Error starting class');
-    } finally {
-      setActionLoading(false);
     }
   };
 
@@ -334,27 +348,96 @@ export default function TeacherDashboardPage() {
     e.preventDefault();
     if (!selectedSchedule) return;
 
-    setActionLoading(true);
+    const scheduleToComplete = selectedSchedule;
+    const currentRemarks = remarks;
+
+    // 1. Immediately close modal and clear inputs for instant screen response
+    setEndModalOpen(false);
+    setRemarks('');
+    setSelectedSchedule(null);
+
+    // Calculate duration in minutes
+    let durationMinutes = 60;
+    if (scheduleToComplete.start_time && scheduleToComplete.end_time) {
+      const [sH, sM] = scheduleToComplete.start_time.split(':').map(Number);
+      const [eH, eM] = scheduleToComplete.end_time.split(':').map(Number);
+      if (!isNaN(sH) && !isNaN(eH)) {
+        const startTotal = sH * 60 + (sM || 0);
+        const endTotal = eH * 60 + (eM || 0);
+        if (endTotal > startTotal) {
+          durationMinutes = Math.min(180, Math.max(15, endTotal - startTotal));
+        }
+      }
+    }
+
+    const previousSchedules = [...schedules];
+    const previousStats = { ...stats };
+    const previousLogs = [...recentLogs];
+
+    // 2. Instant optimistic UI update
+    setSchedules(prev =>
+      prev.map(s =>
+        s.id === scheduleToComplete.id
+          ? { ...s, status: 'completed' }
+          : s
+      )
+    );
+
+    const optimisticLog: ClassLog = {
+      id: 'log_opt_' + Date.now(),
+      schedule_id: scheduleToComplete.id,
+      teacher_id: scheduleToComplete.teacher_id,
+      teacher_name: scheduleToComplete.teacher_name || teacher?.name || 'Teacher',
+      student_id: scheduleToComplete.student_id,
+      student_name: scheduleToComplete.student_name || scheduleToComplete.batch_name || 'Student',
+      student_names: scheduleToComplete.student_names,
+      is_batch: scheduleToComplete.is_batch,
+      batch_name: scheduleToComplete.batch_name,
+      subject_name: scheduleToComplete.subject_name,
+      grade_class: scheduleToComplete.grade_class,
+      date: scheduleToComplete.date || todayStr,
+      start_time: scheduleToComplete.start_time,
+      end_time: scheduleToComplete.end_time,
+      duration_minutes: durationMinutes,
+      status: 'completed',
+      remarks: currentRemarks ? currentRemarks.trim() : 'Class completed successfully.',
+      created_at: new Date().toISOString(),
+    };
+
+    setRecentLogs(prev => [optimisticLog, ...prev]);
+
+    setStats(prev => ({
+      ...prev,
+      monthClassesCount: prev.monthClassesCount + 1,
+      monthHours: Math.round((prev.monthHours + durationMinutes / 60) * 10) / 10,
+    }));
+
+    // 3. Perform background API call
     try {
       const res = await fetch('/api/teacher/class/end', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          scheduleId: selectedSchedule.id,
-          remarks,
+          scheduleId: scheduleToComplete.id,
+          remarks: currentRemarks,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to end class');
 
-      setEndModalOpen(false);
-      setRemarks('');
-      setSelectedSchedule(null);
-      await fetchDashboardData();
+      if (data.log) {
+        setRecentLogs(prev => prev.map(l => l.id === optimisticLog.id ? data.log : l));
+      }
+      if (data.schedule) {
+        setSchedules(prev => prev.map(s => s.id === data.schedule.id ? data.schedule : s));
+      }
+      fetchDashboardData(true);
     } catch (err: any) {
-      alert(err.message || 'Error ending class');
-    } finally {
-      setActionLoading(false);
+      console.error('Error ending class:', err);
+      setSchedules(previousSchedules);
+      setStats(previousStats);
+      setRecentLogs(previousLogs);
+      alert(err.message || 'Error ending class. Please try again.');
     }
   };
 
@@ -362,28 +445,77 @@ export default function TeacherDashboardPage() {
     e.preventDefault();
     if (!selectedSchedule) return;
 
-    setActionLoading(true);
+    const scheduleToCancel = selectedSchedule;
+    const currentReason = cancelReason;
+    const currentRemarks = remarks;
+
+    // 1. Immediately close modal and clear inputs
+    setCancelModalOpen(false);
+    setRemarks('');
+    setSelectedSchedule(null);
+
+    const previousSchedules = [...schedules];
+    const previousLogs = [...recentLogs];
+
+    // 2. Instant optimistic UI update
+    setSchedules(prev =>
+      prev.map(s =>
+        s.id === scheduleToCancel.id
+          ? { ...s, status: 'cancelled' }
+          : s
+      )
+    );
+
+    const optimisticLog: ClassLog = {
+      id: 'log_opt_' + Date.now(),
+      schedule_id: scheduleToCancel.id,
+      teacher_id: scheduleToCancel.teacher_id,
+      teacher_name: scheduleToCancel.teacher_name || teacher?.name || 'Teacher',
+      student_id: scheduleToCancel.student_id,
+      student_name: scheduleToCancel.student_name || scheduleToCancel.batch_name || 'Student',
+      student_names: scheduleToCancel.student_names,
+      is_batch: scheduleToCancel.is_batch,
+      batch_name: scheduleToCancel.batch_name,
+      subject_name: scheduleToCancel.subject_name,
+      grade_class: scheduleToCancel.grade_class,
+      date: scheduleToCancel.date || todayStr,
+      start_time: scheduleToCancel.start_time,
+      end_time: scheduleToCancel.end_time,
+      duration_minutes: 0,
+      status: 'cancelled',
+      cancelled_reason: currentReason,
+      remarks: currentRemarks ? currentRemarks.trim() : '',
+      created_at: new Date().toISOString(),
+    };
+
+    setRecentLogs(prev => [optimisticLog, ...prev]);
+
+    // 3. Perform background API call
     try {
       const res = await fetch('/api/teacher/class/cancel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          scheduleId: selectedSchedule.id,
-          reason: cancelReason,
-          remarks,
+          scheduleId: scheduleToCancel.id,
+          reason: currentReason,
+          remarks: currentRemarks,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to cancel class');
 
-      setCancelModalOpen(false);
-      setRemarks('');
-      setSelectedSchedule(null);
-      await fetchDashboardData();
+      if (data.log) {
+        setRecentLogs(prev => prev.map(l => l.id === optimisticLog.id ? data.log : l));
+      }
+      if (data.schedule) {
+        setSchedules(prev => prev.map(s => s.id === data.schedule.id ? data.schedule : s));
+      }
+      fetchDashboardData(true);
     } catch (err: any) {
-      alert(err.message || 'Error cancelling class');
-    } finally {
-      setActionLoading(false);
+      console.error('Error cancelling class:', err);
+      setSchedules(previousSchedules);
+      setRecentLogs(previousLogs);
+      alert(err.message || 'Error cancelling class. Please try again.');
     }
   };
 

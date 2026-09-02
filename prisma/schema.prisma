@@ -38,21 +38,22 @@ model User {
 }
 
 model Teacher {
-  id                   String     @id @default(cuid())
-  userId               String     @unique @map("user_id")
-  user                 User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  email                String     @unique
+  id                   String             @id @default(cuid())
+  userId               String             @unique @map("user_id")
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email                String             @unique
   name                 String
   phone                String
-  avatarUrl            String?    @map("avatar_url")
-  bio                  String?    @default("")
+  avatarUrl            String?            @map("avatar_url")
+  bio                  String?            @default("")
   subjects             String[]
-  assignedStudentCount Int        @default(0) @map("assigned_student_count")
-  status               Status     @default(active)
-  createdAt            DateTime   @default(now()) @map("created_at")
+  assignedStudentCount Int                @default(0) @map("assigned_student_count")
+  status               Status             @default(active)
+  createdAt            DateTime           @default(now()) @map("created_at")
   students             Student[]
   schedules            Schedule[]
   classLogs            ClassLog[]
+  scheduleTemplates    ScheduleTemplate[]
 
   @@index([name])
   @@index([status])
@@ -170,6 +171,31 @@ model UserPassword {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("user_passwords")
+}
+
+model ScheduleTemplate {
+  id                 String   @id @default(cuid())
+  teacherId          String   @map("teacher_id")
+  teacher            Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  studentId          String   @map("student_id")
+  studentName        String?  @map("student_name")
+  studentNames       String[] @map("student_names")
+  isBatch            Boolean  @default(false) @map("is_batch")
+  batchName          String?  @map("batch_name")
+  subjectName        String   @map("subject_name")
+  gradeClass         String   @map("grade_class")
+  daysOfWeek         String[] @map("days_of_week")
+  startTime          String   @map("start_time")
+  endTime            String   @map("end_time")
+  activeFrom         String   @map("active_from")
+  activeUntil        String   @map("active_until")
+  isActive           Boolean  @default(true) @map("is_active")
+  lastGeneratedAt    DateTime? @map("last_generated_at")
+  lastGeneratedCount Int      @default(0) @map("last_generated_count")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@index([teacherId])
+  @@map("schedule_templates")
 }
 
 model PasswordResetToken {

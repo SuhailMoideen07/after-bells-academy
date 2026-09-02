@@ -1,13 +1,14 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import type { Teacher, Student, Batch, Schedule, ClassLog, AdminAnalytics } from '@/types/tms';
+import type { Teacher, Student, Batch, Schedule, ClassLog, AdminAnalytics, ScheduleTemplate } from '@/types/tms';
 
 interface AdminDataContextType {
   teachers: Teacher[];
   students: Student[];
   batches: Batch[];
   schedules: Schedule[];
+  scheduleTemplates: ScheduleTemplate[];
   recentLogs: ClassLog[];
   todaySchedules: Schedule[];
   analytics: AdminAnalytics;
@@ -17,6 +18,7 @@ interface AdminDataContextType {
   setStudents: React.Dispatch<React.SetStateAction<Student[]>>;
   setBatches: React.Dispatch<React.SetStateAction<Batch[]>>;
   setSchedules: React.Dispatch<React.SetStateAction<Schedule[]>>;
+  setScheduleTemplates: React.Dispatch<React.SetStateAction<ScheduleTemplate[]>>;
   addTeacherLocally: (teacher: Teacher) => void;
   updateTeacherLocally: (id: string, updates: Partial<Teacher>) => void;
   deleteTeacherLocally: (id: string) => void;
@@ -28,6 +30,9 @@ interface AdminDataContextType {
   addScheduleLocally: (schedule: Schedule) => void;
   updateScheduleLocally: (id: string, updates: Partial<Schedule>) => void;
   deleteScheduleLocally: (id: string) => void;
+  addScheduleTemplateLocally: (template: ScheduleTemplate) => void;
+  updateScheduleTemplateLocally: (id: string, updates: Partial<ScheduleTemplate>) => void;
+  deleteScheduleTemplateLocally: (id: string) => void;
 }
 
 const defaultAnalytics: AdminAnalytics = {
@@ -45,6 +50,7 @@ export function AdminDataProvider({ children }: { children: React.ReactNode }) {
   const [students, setStudents] = useState<Student[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [scheduleTemplates, setScheduleTemplates] = useState<ScheduleTemplate[]>([]);
   const [recentLogs, setRecentLogs] = useState<ClassLog[]>([]);
   const [todaySchedules, setTodaySchedules] = useState<Schedule[]>([]);
   const [analytics, setAnalytics] = useState<AdminAnalytics>(defaultAnalytics);
@@ -59,6 +65,7 @@ export function AdminDataProvider({ children }: { children: React.ReactNode }) {
         setStudents(data.students || []);
         setBatches(data.batches || []);
         setSchedules(data.schedules || []);
+        setScheduleTemplates(data.scheduleTemplates || []);
         setRecentLogs(data.recentLogs || []);
         setTodaySchedules(data.todaySchedules || []);
         setAnalytics(data.analytics || defaultAnalytics);
@@ -118,6 +125,18 @@ export function AdminDataProvider({ children }: { children: React.ReactNode }) {
     setSchedules(prev => prev.filter(s => s.id !== id));
   }, []);
 
+  const addScheduleTemplateLocally = useCallback((template: ScheduleTemplate) => {
+    setScheduleTemplates(prev => [template, ...prev.filter(t => t.id !== template.id)]);
+  }, []);
+
+  const updateScheduleTemplateLocally = useCallback((id: string, updates: Partial<ScheduleTemplate>) => {
+    setScheduleTemplates(prev => prev.map(t => (t.id === id ? { ...t, ...updates } : t)));
+  }, []);
+
+  const deleteScheduleTemplateLocally = useCallback((id: string) => {
+    setScheduleTemplates(prev => prev.filter(t => t.id !== id));
+  }, []);
+
   return (
     <AdminDataContext.Provider
       value={{
@@ -125,6 +144,7 @@ export function AdminDataProvider({ children }: { children: React.ReactNode }) {
         students,
         batches,
         schedules,
+        scheduleTemplates,
         recentLogs,
         todaySchedules,
         analytics,
@@ -134,6 +154,7 @@ export function AdminDataProvider({ children }: { children: React.ReactNode }) {
         setStudents,
         setBatches,
         setSchedules,
+        setScheduleTemplates,
         addTeacherLocally,
         updateTeacherLocally,
         deleteTeacherLocally,
@@ -145,6 +166,9 @@ export function AdminDataProvider({ children }: { children: React.ReactNode }) {
         addScheduleLocally,
         updateScheduleLocally,
         deleteScheduleLocally,
+        addScheduleTemplateLocally,
+        updateScheduleTemplateLocally,
+        deleteScheduleTemplateLocally,
       }}
     >
       {children}
