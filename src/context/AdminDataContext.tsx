@@ -30,6 +30,7 @@ interface AdminDataContextType {
   addScheduleLocally: (schedule: Schedule) => void;
   updateScheduleLocally: (id: string, updates: Partial<Schedule>) => void;
   deleteScheduleLocally: (id: string) => void;
+  deleteSchedulesLocally: (ids: string[]) => void;
   addScheduleTemplateLocally: (template: ScheduleTemplate) => void;
   updateScheduleTemplateLocally: (id: string, updates: Partial<ScheduleTemplate>) => void;
   deleteScheduleTemplateLocally: (id: string) => void;
@@ -123,6 +124,13 @@ export function AdminDataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteScheduleLocally = useCallback((id: string) => {
     setSchedules(prev => prev.filter(s => s.id !== id));
+    setTodaySchedules(prev => prev.filter(s => s.id !== id));
+  }, []);
+
+  const deleteSchedulesLocally = useCallback((ids: string[]) => {
+    const idSet = new Set(ids);
+    setSchedules(prev => prev.filter(s => !idSet.has(s.id)));
+    setTodaySchedules(prev => prev.filter(s => !idSet.has(s.id)));
   }, []);
 
   const addScheduleTemplateLocally = useCallback((template: ScheduleTemplate) => {
@@ -166,6 +174,7 @@ export function AdminDataProvider({ children }: { children: React.ReactNode }) {
         addScheduleLocally,
         updateScheduleLocally,
         deleteScheduleLocally,
+        deleteSchedulesLocally,
         addScheduleTemplateLocally,
         updateScheduleTemplateLocally,
         deleteScheduleTemplateLocally,

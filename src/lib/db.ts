@@ -403,6 +403,17 @@ class JsonDatabaseManager {
     return true;
   }
 
+  public deleteSchedules(ids: string[]): number {
+    const idSet = new Set(ids);
+    const initialLen = this.data.schedules.length;
+    this.data.schedules = this.data.schedules.filter(s => !idSet.has(s.id));
+    const count = initialLen - this.data.schedules.length;
+    if (count > 0) {
+      this.saveToFile();
+    }
+    return count;
+  }
+
   public getSchedulesByTeacher(teacherId: string): Schedule[] {
     return this.data.schedules.filter(s => s.teacher_id === teacherId);
   }
@@ -1100,6 +1111,15 @@ export const db = {
     if (!isPrismaEnabled()) return jsonDb.deleteSchedule(id);
     await prisma.schedule.delete({ where: { id } });
     return true;
+  },
+
+  async deleteSchedules(ids: string[]): Promise<number> {
+    if (!ids || ids.length === 0) return 0;
+    if (!isPrismaEnabled()) return jsonDb.deleteSchedules(ids);
+    const result = await prisma.schedule.deleteMany({
+      where: { id: { in: ids } },
+    });
+    return result.count;
   },
 
   async getSchedulesByTeacher(teacherId: string): Promise<Schedule[]> {

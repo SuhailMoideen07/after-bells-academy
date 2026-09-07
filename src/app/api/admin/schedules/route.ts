@@ -170,7 +170,30 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ success });
     }
 
-    return NextResponse.json({ error: 'Schedule ID or clear all flag required' }, { status: 400 });
+    const idsParam = searchParams.get('ids');
+    let ids: string[] = [];
+    if (idsParam) {
+      ids = idsParam.split(',').map(s => s.trim()).filter(Boolean);
+    } else {
+      try {
+        const body = await request.json();
+        if (Array.isArray(body?.ids)) {
+          ids = body.ids.filter((item: any) => typeof item === 'string' && item.trim().length > 0);
+        } else if (typeof body?.id === 'string') {
+          const success = await db.deleteSchedule(body.id);
+          return NextResponse.json({ success });
+        }
+      } catch {
+        // Request body might be empty, handled by validation below
+      }
+    }
+
+    if (ids.length > 0) {
+      const count = await db.deleteSchedules(ids);
+      return NextResponse.json({ success: true, count, message: `${count} schedule(s) deleted successfully` });
+    }
+
+    return NextResponse.json({ error: 'Schedule ID, IDs list, or clear all flag required' }, { status: 400 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Server error' }, { status: 500 });
   }

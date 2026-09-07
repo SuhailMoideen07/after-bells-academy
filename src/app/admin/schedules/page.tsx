@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Calendar, Clock, User, BookOpen, Sparkles, Trash2, Search, Filter, X, AlertTriangle, Edit2, Repeat, Play, Pause, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { Plus, Calendar, Clock, User, BookOpen, Sparkles, Trash2, Search, Filter, X, AlertTriangle, Edit2, Repeat, Play, Pause, RefreshCw, CheckCircle2, RotateCcw, CheckSquare, Square } from 'lucide-react';
 import type { Schedule, Teacher, Student, Subject, Batch, ScheduleTemplate, TemplateDay } from '@/types/tms';
 
 export function getLocalTodayString(d = new Date()): string {
@@ -137,6 +137,7 @@ export default function SchedulesManagementPage() {
     addScheduleLocally,
     updateScheduleLocally,
     deleteScheduleLocally,
+    deleteSchedulesLocally,
     addBatchLocally,
     deleteBatchLocally,
     addScheduleTemplateLocally,
@@ -174,8 +175,16 @@ export default function SchedulesManagementPage() {
   // Filters
   const [search, setSearch] = useState('');
   const [selectedTeacher, setSelectedTeacher] = useState('');
+  const [selectedDatePreset, setSelectedDatePreset] = useState<'all' | 'today' | 'tomorrow' | 'this_week' | 'upcoming' | 'past' | 'custom'>('all');
+  const [selectedDate, setSelectedDate] = useState('');
   const [selectedBatch, setSelectedBatch] = useState('');
+  const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
+
+  // Multi-Selection State & Bulk Delete
+  const [selectedScheduleIds, setSelectedScheduleIds] = useState<string[]>([]);
+  const [bulkDeleteModalOpen, setBulkDeleteModalOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   // Student details modal
   const [studentModalData, setStudentModalData] = useState<{ title: string; students: string[] } | null>(null);
@@ -548,6 +557,7 @@ export default function SchedulesManagementPage() {
     if (!confirm('Are you sure you want to delete this schedule?')) return;
     try {
       deleteScheduleLocally(id);
+      setSelectedScheduleIds(prev => prev.filter(item => item !== id));
       const res = await fetch(`/api/admin/schedules?id=${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete schedule');
       refetchAdminData();
@@ -555,6 +565,35 @@ export default function SchedulesManagementPage() {
       alert(err.message || 'Error deleting schedule');
       refetchAdminData();
     }
+  };
+
+  const availableSubjects = useMemo(() => {
+    const set = new Set<string>();
+    schedules.forEach(s => {
+      if (s.subject_name) set.add(s.subject_name);
+    });
+    ['Mathematics', 'Physics', 'Chemistry', 'Biology', 'English', 'Science', 'Social Studies'].forEach(s => set.add(s));
+    return Array.from(set).sort();
+  }, [schedules]);
+
+  const isAnyFilterActive = Boolean(
+    search ||
+    selectedTeacher ||
+    selectedDatePreset !== 'all' ||
+    selectedDate ||
+    selectedBatch ||
+    selectedSubject ||
+    selectedStatus
+  );
+
+  const handleResetFilters = () => {
+    setSearch('');
+    setSelectedTeacher('');
+    setSelectedDatePreset('all');
+    setSelectedDate('');
+    setSelectedBatch('');
+    setSelectedSubject('');
+    setSelectedStatus('');
   };
 
   const handleSaveNewBatch = async (e: React.FormEvent) => {
@@ -624,6 +663,19 @@ export default function SchedulesManagementPage() {
   };
 
   const filteredSchedules = useMemo(() => {
+    const todayStr = getLocalTodayString();
+
+    // Compute start & end of this week (Monday to Sunday)
+    const now = new Date();
+    const currentDay = now.getDay();
+    const diffToMonday = (currentDay + 6) % 7;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - diffToMonday);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    const weekStartStr = getLocalTodayString(monday);
+    const weekEndStr = getLocalTodayString(sunday);
+
     return schedules
       .filter(sch => {
         if (search) {
@@ -633,13 +685,38 @@ export default function SchedulesManagementPage() {
           const matchSubject = sch.subject_name?.toLowerCase().includes(q);
           const matchStudentName = sch.student_name?.toLowerCase().includes(q);
           const matchStudents = sch.student_names?.some(s => s.toLowerCase().includes(q));
-          if (!matchTeacher && !matchBatch && !matchSubject && !matchStudentName && !matchStudents) {
+          const matchDate = sch.date?.toLowerCase().includes(q);
+          if (!matchTeacher && !matchBatch && !matchSubject && !matchStudentName && !matchStudents && !matchDate) {
             return false;
           }
         }
         if (selectedTeacher && sch.teacher_id !== selectedTeacher) return false;
         if (selectedBatch && sch.batch_name !== selectedBatch) return false;
+        if (selectedSubject && sch.subject_name !== selectedSubject) return false;
         if (selectedStatus && sch.status !== selectedStatus) return false;
+
+        // Date Preset filtering
+        if (selectedDatePreset === 'today') {
+          if (sch.date !== todayStr) return false;
+        } else if (selectedDatePreset === 'tomorrow') {
+          const tomorrow = new Date();
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          if (sch.date !== getLocalTodayString(tomorrow)) return false;
+        } else if (selectedDatePreset === 'this_week') {
+          if (!sch.date || sch.date < weekStartStr || sch.date > weekEndStr) return false;
+        } else if (selectedDatePreset === 'upcoming') {
+          if (!sch.date || sch.date < todayStr) return false;
+        } else if (selectedDatePreset === 'past') {
+          if (!sch.date || sch.date >= todayStr) return false;
+        } else if (selectedDatePreset === 'custom' && selectedDate) {
+          if (sch.date !== selectedDate) return false;
+        }
+
+        // Direct date input filter (if a specific date is selected)
+        if (selectedDate && selectedDatePreset !== 'custom') {
+          if (sch.date !== selectedDate) return false;
+        }
+
         return true;
       })
       .sort((a, b) => {
@@ -649,7 +726,66 @@ export default function SchedulesManagementPage() {
         if (timeCompare !== 0) return timeCompare;
         return (b.id || '').localeCompare(a.id || '');
       });
-  }, [schedules, search, selectedTeacher, selectedBatch, selectedStatus]);
+  }, [schedules, search, selectedTeacher, selectedBatch, selectedSubject, selectedStatus, selectedDatePreset, selectedDate]);
+
+  const isAllFilteredSelected =
+    filteredSchedules.length > 0 &&
+    filteredSchedules.every(s => selectedScheduleIds.includes(s.id));
+
+  const isSomeFilteredSelected =
+    filteredSchedules.some(s => selectedScheduleIds.includes(s.id));
+
+  const handleToggleSelectSchedule = (id: string) => {
+    setSelectedScheduleIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleToggleSelectAll = () => {
+    const filteredIds = filteredSchedules.map(s => s.id);
+    if (isAllFilteredSelected) {
+      setSelectedScheduleIds(prev => prev.filter(id => !filteredIds.includes(id)));
+    } else {
+      setSelectedScheduleIds(prev => Array.from(new Set([...prev, ...filteredIds])));
+    }
+  };
+
+  const handleClearSelection = () => {
+    setSelectedScheduleIds([]);
+  };
+
+  const handleBulkDeleteConfirm = async () => {
+    if (selectedScheduleIds.length === 0 || isBulkDeleting) return;
+    setIsBulkDeleting(true);
+    const idsToDelete = [...selectedScheduleIds];
+
+    // Optimistically update
+    deleteSchedulesLocally(idsToDelete);
+    setSelectedScheduleIds([]);
+    setBulkDeleteModalOpen(false);
+
+    try {
+      const res = await fetch('/api/admin/schedules', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: idsToDelete }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete schedules');
+
+      setTemplateNotification({
+        type: 'success',
+        message: `Deleted ${idsToDelete.length} schedule session${idsToDelete.length > 1 ? 's' : ''} successfully.`,
+      });
+      setTimeout(() => setTemplateNotification(null), 5000);
+      refetchAdminData();
+    } catch (err: any) {
+      alert(err.message || 'Error deleting selected schedules');
+      refetchAdminData();
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
 
   const visibleStudents = useMemo(() => {
     if (!selectedBatchId) return students;
@@ -777,54 +913,232 @@ export default function SchedulesManagementPage() {
       {activeTab === 'schedules' && (
         <div className="space-y-4">
           {/* FILTER CONTROLS BAR */}
-          <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm space-y-3 sm:space-y-0 sm:flex sm:items-center sm:gap-3 flex-wrap">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-              <input
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search schedules by student, batch, teacher, or subject..."
-                className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-navy-primary"
-              />
+          <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3">
+            <div className="flex flex-col md:flex-row md:items-center gap-3 flex-wrap">
+              {/* Search */}
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Search by student, batch, teacher, subject, or date..."
+                  className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-navy-primary font-medium"
+                />
+                {search && (
+                  <button
+                    onClick={() => setSearch('')}
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Teacher Dropdown */}
+              <div className="w-full sm:w-44">
+                <select
+                  value={selectedTeacher}
+                  onChange={e => setSelectedTeacher(e.target.value)}
+                  className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none font-semibold text-slate-700"
+                >
+                  <option value="">👤 All Teachers</option>
+                  {teachers.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Date Filter: Preset + Specific Date Picker */}
+              <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                <select
+                  value={selectedDatePreset}
+                  onChange={e => {
+                    const val = e.target.value as any;
+                    setSelectedDatePreset(val);
+                    if (val !== 'custom') setSelectedDate('');
+                  }}
+                  className="w-full sm:w-36 p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none font-semibold text-slate-700"
+                >
+                  <option value="all">📅 All Dates</option>
+                  <option value="today">Today</option>
+                  <option value="tomorrow">Tomorrow</option>
+                  <option value="this_week">This Week</option>
+                  <option value="upcoming">Upcoming</option>
+                  <option value="past">Past</option>
+                  <option value="custom">Specific Date...</option>
+                </select>
+
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={e => {
+                    setSelectedDate(e.target.value);
+                    setSelectedDatePreset('custom');
+                  }}
+                  className="p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none"
+                  title="Filter by exact date"
+                />
+                {selectedDate && (
+                  <button
+                    onClick={() => {
+                      setSelectedDate('');
+                      setSelectedDatePreset('all');
+                    }}
+                    className="p-1 text-slate-400 hover:text-slate-600"
+                    title="Clear date filter"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Batch Dropdown */}
+              <div className="w-full sm:w-44">
+                <select
+                  value={selectedBatch}
+                  onChange={e => setSelectedBatch(e.target.value)}
+                  className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none font-semibold text-slate-700"
+                >
+                  <option value="">🏷️ All Batches</option>
+                  {[...batches]
+                    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
+                    .map(b => (
+                      <option key={b.id} value={b.name}>{b.name}</option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Subject Dropdown */}
+              <div className="w-full sm:w-36">
+                <select
+                  value={selectedSubject}
+                  onChange={e => setSelectedSubject(e.target.value)}
+                  className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none font-semibold text-slate-700"
+                >
+                  <option value="">📚 All Subjects</option>
+                  {availableSubjects.map(subj => (
+                    <option key={subj} value={subj}>{subj}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Status Dropdown */}
+              <div className="w-full sm:w-36">
+                <select
+                  value={selectedStatus}
+                  onChange={e => setSelectedStatus(e.target.value)}
+                  className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none font-semibold text-slate-700"
+                >
+                  <option value="">⚡ All Statuses</option>
+                  <option value="scheduled">Scheduled</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+
+              {/* Reset All Filters Button */}
+              {isAnyFilterActive && (
+                <button
+                  onClick={handleResetFilters}
+                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs rounded-xl flex items-center gap-1.5 transition-colors shrink-0"
+                  title="Clear all active filters"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" /> Reset Filters
+                </button>
+              )}
             </div>
 
-            <select
-              value={selectedTeacher}
-              onChange={e => setSelectedTeacher(e.target.value)}
-              className="w-full sm:w-40 p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none font-semibold text-slate-700"
-            >
-              <option value="">All Teachers</option>
-              {teachers.map(t => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-
-            <select
-              value={selectedBatch}
-              onChange={e => setSelectedBatch(e.target.value)}
-              className="w-full sm:w-44 p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none font-semibold text-slate-700"
-            >
-              <option value="">All Batches</option>
-              {[...batches]
-                .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
-                .map(b => (
-                  <option key={b.id} value={b.name}>{b.name}</option>
-                ))}
-            </select>
-
-            <select
-              value={selectedStatus}
-              onChange={e => setSelectedStatus(e.target.value)}
-              className="w-full sm:w-36 p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none font-semibold text-slate-700"
-            >
-              <option value="">All Statuses</option>
-              <option value="scheduled">Scheduled</option>
-              <option value="in_progress">In Progress</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
+            {/* ACTIVE FILTERS CHIPS */}
+            {isAnyFilterActive && (
+              <div className="pt-2.5 border-t border-slate-100 flex items-center gap-2 flex-wrap text-xs">
+                <span className="font-bold text-slate-400 text-[11px] uppercase tracking-wider">
+                  Active Filters ({filteredSchedules.length} of {schedules.length} matches):
+                </span>
+                {selectedTeacher && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-navy-50 text-navy-primary text-xs font-semibold border border-navy-100">
+                    Teacher: {teachers.find(t => t.id === selectedTeacher)?.name || selectedTeacher}
+                    <button onClick={() => setSelectedTeacher('')} className="hover:text-red-500 cursor-pointer"><X className="w-3 h-3" /></button>
+                  </span>
+                )}
+                {(selectedDatePreset !== 'all' || selectedDate) && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gold-light text-navy-dark text-xs font-semibold border border-gold-accent/30">
+                    Date: {selectedDate ? formatDateDDMMYYYY(selectedDate) : selectedDatePreset.replace('_', ' ')}
+                    <button onClick={() => { setSelectedDate(''); setSelectedDatePreset('all'); }} className="hover:text-red-500 cursor-pointer"><X className="w-3 h-3" /></button>
+                  </span>
+                )}
+                {selectedBatch && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200">
+                    Batch: {selectedBatch}
+                    <button onClick={() => setSelectedBatch('')} className="hover:text-red-500 cursor-pointer"><X className="w-3 h-3" /></button>
+                  </span>
+                )}
+                {selectedSubject && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200">
+                    Subject: {selectedSubject}
+                    <button onClick={() => setSelectedSubject('')} className="hover:text-red-500 cursor-pointer"><X className="w-3 h-3" /></button>
+                  </span>
+                )}
+                {selectedStatus && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200">
+                    Status: {selectedStatus}
+                    <button onClick={() => setSelectedStatus('')} className="hover:text-red-500 cursor-pointer"><X className="w-3 h-3" /></button>
+                  </span>
+                )}
+                {search && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200">
+                    Keyword: "{search}"
+                    <button onClick={() => setSearch('')} className="hover:text-red-500 cursor-pointer"><X className="w-3 h-3" /></button>
+                  </span>
+                )}
+                <button
+                  onClick={handleResetFilters}
+                  className="text-xs text-red-600 hover:underline font-bold ml-1 cursor-pointer"
+                >
+                  Clear All
+                </button>
+              </div>
+            )}
           </div>
+
+          {/* BULK ACTIONS BAR (Shows whenever 1 or more schedules are selected) */}
+          {selectedScheduleIds.length > 0 && (
+            <div className="bg-navy-primary text-white p-3.5 px-5 rounded-2xl flex items-center justify-between gap-3 shadow-lg flex-wrap animate-in fade-in slide-in-from-top-2 border border-navy-dark">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="w-7 h-7 rounded-xl bg-gold-accent text-navy-dark font-black text-xs flex items-center justify-center shadow-xs">
+                  {selectedScheduleIds.length}
+                </span>
+                <span className="font-extrabold text-xs sm:text-sm">
+                  {selectedScheduleIds.length} Schedule{selectedScheduleIds.length > 1 ? 's' : ''} Selected
+                </span>
+                <button
+                  type="button"
+                  onClick={handleToggleSelectAll}
+                  className="text-xs text-gold-accent hover:underline font-bold ml-1 cursor-pointer"
+                >
+                  {isAllFilteredSelected ? 'Deselect All Filtered' : `Select All Filtered (${filteredSchedules.length})`}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearSelection}
+                  className="text-xs text-slate-300 hover:text-white hover:underline font-medium cursor-pointer"
+                >
+                  Clear Selection
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setBulkDeleteModalOpen(true)}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" /> Delete Selected ({selectedScheduleIds.length})
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* SCHEDULES TABLE */}
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
@@ -832,19 +1146,46 @@ export default function SchedulesManagementPage() {
               <span className="text-xs font-bold text-navy-primary uppercase tracking-wider">
                 Total Active Schedules ({filteredSchedules.length})
               </span>
+              {selectedScheduleIds.length > 0 && (
+                <span className="text-xs font-extrabold text-red-600">
+                  {selectedScheduleIds.length} selected for action
+                </span>
+              )}
             </div>
 
             {filteredSchedules.length === 0 ? (
               <div className="p-12 text-center text-slate-500">
                 <Calendar className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                <p className="font-bold text-sm text-navy-primary">No Active Schedules</p>
-                <p className="text-xs mt-1">Create an auto-scheduling template or add individual sessions to populate the timetable.</p>
+                <p className="font-bold text-sm text-navy-primary">No Active Schedules Found</p>
+                <p className="text-xs mt-1">
+                  {isAnyFilterActive ? 'Try adjusting or clearing your filters above.' : 'Create an auto-scheduling template or add individual sessions to populate the timetable.'}
+                </p>
+                {isAnyFilterActive && (
+                  <button
+                    onClick={handleResetFilters}
+                    className="mt-3 px-3.5 py-1.5 bg-navy-primary text-white text-xs font-bold rounded-xl hover:bg-navy-dark transition-colors inline-flex items-center gap-1"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" /> Reset Filters
+                  </button>
+                )}
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-100/80 uppercase tracking-wider text-slate-500 font-bold border-b border-slate-200">
                     <tr>
+                      <th className="p-3.5 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isAllFilteredSelected}
+                          ref={el => {
+                            if (el) el.indeterminate = isSomeFilteredSelected && !isAllFilteredSelected;
+                          }}
+                          onChange={handleToggleSelectAll}
+                          className="w-4 h-4 rounded text-navy-primary focus:ring-navy-primary cursor-pointer accent-navy-primary"
+                          title={isAllFilteredSelected ? "Deselect all filtered" : "Select all filtered"}
+                        />
+                      </th>
                       <th className="p-3.5">Date</th>
                       <th className="p-3.5">Time</th>
                       <th className="p-3.5">Teacher</th>
@@ -857,6 +1198,7 @@ export default function SchedulesManagementPage() {
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-medium">
                     {filteredSchedules.map(sch => {
+                      const isSelected = selectedScheduleIds.includes(sch.id);
                       const studentList: string[] = sch.student_names && sch.student_names.length > 0
                         ? [...sch.student_names].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }))
                         : [sch.student_name || 'Student'];
@@ -864,7 +1206,23 @@ export default function SchedulesManagementPage() {
                       const hasMore = studentList.length > 1;
 
                       return (
-                        <tr key={sch.id} className="hover:bg-slate-50 transition-colors">
+                        <tr
+                          key={sch.id}
+                          className={`transition-colors ${
+                            isSelected
+                              ? 'bg-amber-50/70 border-l-4 border-l-gold-accent'
+                              : 'hover:bg-slate-50'
+                          }`}
+                        >
+                          <td className="p-3.5 w-10 text-center">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleToggleSelectSchedule(sch.id)}
+                              className="w-4 h-4 rounded text-navy-primary focus:ring-navy-primary cursor-pointer accent-navy-primary"
+                              title="Select schedule"
+                            />
+                          </td>
                           <td className="p-3.5 text-slate-800 font-bold whitespace-nowrap">{formatDateDDMMYYYY(sch.date)} ({calculateDayTag(sch.date) || sch.day_of_week})</td>
                           <td className="p-3.5 text-slate-600 whitespace-nowrap">{formatTime12Hr(sch.start_time)} - {formatTime12Hr(sch.end_time)}</td>
                           <td className="p-3.5 text-navy-primary font-extrabold whitespace-nowrap">{sch.teacher_name}</td>
@@ -1933,6 +2291,79 @@ export default function SchedulesManagementPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* MODAL: BULK DELETE CONFIRMATION */}
+      {bulkDeleteModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95">
+            <div className="flex items-center gap-3 text-red-600 mb-3">
+              <div className="w-10 h-10 rounded-2xl bg-red-100 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900">Delete {selectedScheduleIds.length} Schedule{selectedScheduleIds.length > 1 ? 's' : ''}?</h3>
+                <p className="text-xs text-slate-500">This action cannot be undone.</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed mb-4">
+              Are you sure you want to permanently remove the <strong>{selectedScheduleIds.length} selected schedule session{selectedScheduleIds.length > 1 ? 's' : ''}</strong> from the timetable?
+            </p>
+
+            {/* Selected Items Preview */}
+            <div className="max-h-40 overflow-y-auto space-y-1.5 p-2 bg-slate-50 rounded-2xl border border-slate-100 mb-5 text-xs">
+              {selectedScheduleIds.slice(0, 5).map(id => {
+                const sch = schedules.find(s => s.id === id);
+                if (!sch) return null;
+                return (
+                  <div key={id} className="p-2 bg-white rounded-xl border border-slate-200/80 flex items-center justify-between">
+                    <div>
+                      <span className="font-extrabold text-navy-primary">{sch.batch_name || sch.student_name}</span>
+                      <span className="text-[11px] text-slate-400 ml-1.5">({sch.subject_name})</span>
+                    </div>
+                    <span className="text-[11px] font-bold text-slate-500">
+                      {formatDateDDMMYYYY(sch.date)} · {formatTime12Hr(sch.start_time)}
+                    </span>
+                  </div>
+                );
+              })}
+              {selectedScheduleIds.length > 5 && (
+                <p className="text-[11px] text-slate-400 text-center font-bold py-1">
+                  ...and {selectedScheduleIds.length - 5} more sessions
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                disabled={isBulkDeleting}
+                onClick={() => setBulkDeleteModalOpen(false)}
+                className="py-2.5 px-4 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isBulkDeleting}
+                onClick={handleBulkDeleteConfirm}
+                className="py-2.5 px-5 bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
+              >
+                {isBulkDeleting ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Yes, Delete {selectedScheduleIds.length} Schedule{selectedScheduleIds.length > 1 ? 's' : ''}</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
