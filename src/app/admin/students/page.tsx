@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, UserCheck, Trash2, Edit3, Phone, GraduationCap } from 'lucide-react';
+import Link from 'next/link';
+import { Plus, Search, UserCheck, Trash2, Edit3, Phone, GraduationCap, CreditCard, Calendar, IndianRupee } from 'lucide-react';
 import type { Student } from '@/types/tms';
 import { useAdminData } from '@/context/AdminDataContext';
 
@@ -26,6 +27,8 @@ export default function StudentManagementPage() {
   const [phone, setPhone] = useState('');
   const [assignedTeacherId, setAssignedTeacherId] = useState('');
   const [subjectsStr, setSubjectsStr] = useState('Mathematics, Physics');
+  const [monthlyFee, setMonthlyFee] = useState('2500');
+  const [joiningDate, setJoiningDate] = useState(new Date().toISOString().split('T')[0]);
 
   // Edit modal state
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -37,6 +40,8 @@ export default function StudentManagementPage() {
   const [editPhone, setEditPhone] = useState('');
   const [editAssignedTeacherId, setEditAssignedTeacherId] = useState('');
   const [editSubjectsStr, setEditSubjectsStr] = useState('');
+  const [editMonthlyFee, setEditMonthlyFee] = useState('2500');
+  const [editJoiningDate, setEditJoiningDate] = useState('');
 
   // Modal submission state
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -65,6 +70,8 @@ export default function StudentManagementPage() {
       assigned_teacher_id: teacherIdToAssign,
       assigned_teacher_name: assignedTeacherObj?.name || 'Unassigned',
       subjects,
+      monthly_fee: parseFloat(monthlyFee) || 0,
+      joining_date: joiningDate || undefined,
       status: 'active',
       created_at: new Date().toISOString(),
     };
@@ -88,6 +95,8 @@ export default function StudentManagementPage() {
           phone,
           assigned_teacher_id: teacherIdToAssign,
           subjects,
+          monthly_fee: parseFloat(monthlyFee) || 0,
+          joining_date: joiningDate || undefined,
         }),
       });
 
@@ -117,6 +126,8 @@ export default function StudentManagementPage() {
     setEditPhone(std.phone);
     setEditAssignedTeacherId(std.assigned_teacher_id || (teachers[0]?.id || ''));
     setEditSubjectsStr((std.subjects || []).join(', '));
+    setEditMonthlyFee(String(std.monthly_fee || 0));
+    setEditJoiningDate(std.joining_date || '');
     setEditModalOpen(true);
   };
 
@@ -138,6 +149,8 @@ export default function StudentManagementPage() {
       assigned_teacher_id: editAssignedTeacherId,
       assigned_teacher_name: assignedTeacherObj?.name || selectedStudent.assigned_teacher_name,
       subjects,
+      monthly_fee: parseFloat(editMonthlyFee) || 0,
+      joining_date: editJoiningDate || undefined,
     };
 
     // INSTANT FEEDBACK: Update locally & close modal immediately!
@@ -158,6 +171,8 @@ export default function StudentManagementPage() {
           phone: editPhone,
           assigned_teacher_id: editAssignedTeacherId,
           subjects,
+          monthly_fee: parseFloat(editMonthlyFee) || 0,
+          joining_date: editJoiningDate || undefined,
         }),
       });
 
@@ -262,6 +277,22 @@ export default function StudentManagementPage() {
               <p className="flex items-center gap-1.5 font-medium">
                 <Phone className="w-3.5 h-3.5 text-emerald-600" /> Phone: <span className="font-bold text-slate-800">{s.phone}</span>
               </p>
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+              <Link
+                href="/admin/fees"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-black hover:bg-emerald-100 transition-colors shadow-2xs"
+                title="View in Fee Management"
+              >
+                <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
+                ₹ {(s.monthly_fee || 0).toLocaleString('en-IN')} / mo
+              </Link>
+              {s.joining_date && (
+                <span className="text-[10px] text-slate-500 font-medium flex items-center gap-1">
+                  <Calendar className="w-3 h-3 text-slate-400" /> {s.joining_date}
+                </span>
+              )}
             </div>
 
             <div className="pt-2 border-t border-slate-100 flex flex-wrap gap-1">
@@ -371,6 +402,34 @@ export default function StudentManagementPage() {
                   placeholder="Mathematics, Physics"
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 p-3 bg-emerald-50/50 rounded-2xl border border-emerald-200/60">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-emerald-900 mb-1">
+                    Monthly Fee (₹)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={monthlyFee}
+                    onChange={e => setMonthlyFee(e.target.value)}
+                    placeholder="e.g. 2500"
+                    className="w-full p-2.5 bg-white border border-emerald-300 rounded-xl text-xs font-bold focus:outline-none"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-emerald-900 mb-1">
+                    Joining / Admission Date
+                  </label>
+                  <input
+                    type="date"
+                    value={joiningDate}
+                    onChange={e => setJoiningDate(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-emerald-300 rounded-xl text-xs focus:outline-none"
+                  />
+                </div>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2">
@@ -489,6 +548,34 @@ export default function StudentManagementPage() {
                   placeholder="Mathematics, Physics"
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 p-3 bg-emerald-50/50 rounded-2xl border border-emerald-200/60">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-emerald-900 mb-1">
+                    Monthly Fee (₹)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={editMonthlyFee}
+                    onChange={e => setEditMonthlyFee(e.target.value)}
+                    placeholder="e.g. 2500"
+                    className="w-full p-2.5 bg-white border border-emerald-300 rounded-xl text-xs font-bold focus:outline-none"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-emerald-900 mb-1">
+                    Joining / Admission Date
+                  </label>
+                  <input
+                    type="date"
+                    value={editJoiningDate}
+                    onChange={e => setEditJoiningDate(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-emerald-300 rounded-xl text-xs focus:outline-none"
+                  />
+                </div>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2">

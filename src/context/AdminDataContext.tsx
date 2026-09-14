@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import type { Teacher, Student, Batch, Schedule, ClassLog, AdminAnalytics, ScheduleTemplate } from '@/types/tms';
+import type { Teacher, Student, Batch, Schedule, ClassLog, AdminAnalytics, ScheduleTemplate, MonthlyFeeSummary } from '@/types/tms';
 
 interface AdminDataContextType {
   teachers: Teacher[];
@@ -12,6 +12,7 @@ interface AdminDataContextType {
   recentLogs: ClassLog[];
   todaySchedules: Schedule[];
   analytics: AdminAnalytics;
+  feeSummary: MonthlyFeeSummary | null;
   loading: boolean;
   refetchAdminData: () => Promise<void>;
   setTeachers: React.Dispatch<React.SetStateAction<Teacher[]>>;
@@ -55,6 +56,7 @@ export function AdminDataProvider({ children }: { children: React.ReactNode }) {
   const [recentLogs, setRecentLogs] = useState<ClassLog[]>([]);
   const [todaySchedules, setTodaySchedules] = useState<Schedule[]>([]);
   const [analytics, setAnalytics] = useState<AdminAnalytics>(defaultAnalytics);
+  const [feeSummary, setFeeSummary] = useState<MonthlyFeeSummary | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
   const fetchBootstrapData = useCallback(async () => {
@@ -70,6 +72,7 @@ export function AdminDataProvider({ children }: { children: React.ReactNode }) {
         setRecentLogs(data.recentLogs || []);
         setTodaySchedules(data.todaySchedules || []);
         setAnalytics(data.analytics || defaultAnalytics);
+        setFeeSummary(data.feeSummary || null);
       }
     } catch (error) {
       console.error('Failed to load admin bootstrap data:', error);
@@ -156,6 +159,7 @@ export function AdminDataProvider({ children }: { children: React.ReactNode }) {
         recentLogs,
         todaySchedules,
         analytics,
+        feeSummary,
         loading,
         refetchAdminData: fetchBootstrapData,
         setTeachers,

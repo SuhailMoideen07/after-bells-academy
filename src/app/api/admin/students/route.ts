@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { name, grade_class, board, guardian_name, phone, assigned_teacher_id, subjects } = body;
+    const { name, grade_class, board, guardian_name, phone, assigned_teacher_id, subjects, monthly_fee, joining_date } = body;
 
     if (!name || !grade_class || !board || !guardian_name || !phone || !assigned_teacher_id) {
       return NextResponse.json({ error: 'All fields are required' }, { status: 400 });
@@ -34,6 +34,8 @@ export async function POST(request: Request) {
       phone,
       assigned_teacher_id,
       subjects: Array.isArray(subjects) ? subjects : ['General'],
+      monthly_fee: monthly_fee !== undefined ? parseFloat(monthly_fee) || 0 : 0,
+      joining_date: joining_date || undefined,
       status: 'active',
     });
 
@@ -55,6 +57,10 @@ export async function PUT(request: Request) {
 
     if (!studentId) {
       return NextResponse.json({ error: 'Student ID is required' }, { status: 400 });
+    }
+
+    if (updates.monthly_fee !== undefined) {
+      updates.monthly_fee = parseFloat(updates.monthly_fee) || 0;
     }
 
     const updated = await db.updateStudent(studentId, updates);

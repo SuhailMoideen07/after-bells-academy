@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   Menu,
   X,
+  CreditCard,
 } from 'lucide-react';
 
 import { AdminDataProvider } from '@/context/AdminDataContext';
@@ -23,6 +24,7 @@ const ADMIN_NAV = [
   { label: 'Overview', href: '/admin', icon: LayoutDashboard },
   { label: 'Teachers', href: '/admin/teachers', icon: Users },
   { label: 'Students', href: '/admin/students', icon: GraduationCap },
+  { label: 'Fees', href: '/admin/fees', icon: CreditCard },
   { label: 'Batches', href: '/admin/batches', icon: Layers },
   { label: 'Schedules', href: '/admin/schedules', icon: Calendar },
   { label: 'Class Logs', href: '/admin/logs', icon: FileSpreadsheet },

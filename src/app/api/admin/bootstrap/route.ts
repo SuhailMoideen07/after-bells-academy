@@ -10,13 +10,18 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized: Admin access required' }, { status: 403 });
     }
 
-    const [teachers, students, batches, schedules, logs, scheduleTemplates] = await Promise.all([
+    const currentMonthNum = new Date().getMonth() + 1;
+    const currentYear = new Date().getFullYear();
+    const currentMonthKey = `${currentYear}-${String(currentMonthNum).padStart(2, '0')}`;
+
+    const [teachers, students, batches, schedules, logs, scheduleTemplates, feeSummary] = await Promise.all([
       db.getAllTeachers().catch(e => { console.error('Bootstrap getAllTeachers error:', e); return []; }),
       db.getAllStudents().catch(e => { console.error('Bootstrap getAllStudents error:', e); return []; }),
       db.getAllBatches().catch(e => { console.error('Bootstrap getAllBatches error:', e); return []; }),
       db.getAllSchedules().catch(e => { console.error('Bootstrap getAllSchedules error:', e); return []; }),
       db.getAllClassLogs().catch(e => { console.error('Bootstrap getAllClassLogs error:', e); return []; }),
       db.getAllScheduleTemplates().catch(e => { console.error('Bootstrap getAllScheduleTemplates error:', e); return []; }),
+      db.getMonthlyFeeSummary(currentMonthKey).catch(e => { console.error('Bootstrap getMonthlyFeeSummary error:', e); return null; }),
     ]);
 
     const recentLogs = logs.slice(0, 15);
@@ -24,7 +29,6 @@ export async function GET() {
     const todaySchedules = schedules.filter(s => s.date === todayStr);
 
     const currentMonth = new Date().getMonth();
-    const currentYear = new Date().getFullYear();
 
     const classesToday = todaySchedules.length;
     const teachersActive = teachers.filter(t => t.status === 'active').length;
@@ -56,6 +60,7 @@ export async function GET() {
       recentLogs,
       todaySchedules,
       analytics,
+      feeSummary,
       totalTeachers: teachers.length,
       totalStudents: students.length,
     });

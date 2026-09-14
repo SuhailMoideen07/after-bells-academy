@@ -95,6 +95,63 @@ export async function GET(request: Request) {
       return NextResponse.json({ reportType, data: breakdown });
     }
 
+    if (reportType === 'fees') {
+      const monthKey = month || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+      const { records: feeRecords, summary } = await db.getFeeRecordsForMonth(monthKey);
+
+      if (format === 'csv') {
+        const escapeCsv = (val: string | number | boolean | undefined) => `"${String(val ?? '').replace(/"/g, '""')}"`;
+        const headers = [
+          'Student Name',
+          'Grade',
+          'Board',
+          'Guardian',
+          'Phone',
+          'Teacher',
+          'Month',
+          'Amount Due (INR)',
+          'Amount Paid (INR)',
+          'Status',
+          'Is Prorated',
+          'Base Fee (INR)',
+          'Proration Reason',
+          'Payment Mode',
+          'Payment Date',
+          'Transaction Ref',
+          'Remarks',
+        ];
+        const rows = feeRecords.map(r => [
+          r.student_name,
+          r.grade_class,
+          r.board,
+          r.guardian_name,
+          r.phone,
+          r.assigned_teacher_name,
+          r.month,
+          r.amount_due,
+          r.amount_paid,
+          r.status.toUpperCase(),
+          r.is_prorated ? 'YES' : 'NO',
+          r.base_amount || r.amount_due,
+          r.proration_reason || '',
+          r.payment_method || '',
+          r.payment_date ? r.payment_date.split('T')[0] : '',
+          r.transaction_ref || '',
+          r.remarks || '',
+        ]);
+        const csvContent = [headers.map(escapeCsv).join(','), ...rows.map(row => row.map(escapeCsv).join(','))].join('\n');
+
+        return new Response(csvContent, {
+          headers: {
+            'Content-Type': 'text/csv; charset=utf-8',
+            'Content-Disposition': `attachment; filename="fees-report-${monthKey}.csv"`,
+          },
+        });
+      }
+
+      return NextResponse.json({ reportType: 'fees', data: feeRecords, summary });
+    }
+
     // Monthly breakdown
     const monthlyMap: Record<string, { month: string; completed: number; cancelled: number; minutes: number }> = {};
     allLogs.forEach(l => {

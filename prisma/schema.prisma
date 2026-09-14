@@ -70,8 +70,11 @@ model Student {
   assignedTeacherId String?  @map("assigned_teacher_id")
   teacher           Teacher? @relation(fields: [assignedTeacherId], references: [id], onDelete: SetNull)
   subjects          String[]
+  monthlyFee        Float    @default(0) @map("monthly_fee")
+  joiningDate       String?  @map("joining_date")
   status            Status   @default(active)
   createdAt         DateTime @default(now()) @map("created_at")
+  feeRecords        FeeRecord[]
 
   @@index([assignedTeacherId])
   @@index([name])
@@ -206,4 +209,28 @@ model PasswordResetToken {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("password_reset_tokens")
+}
+
+model FeeRecord {
+  id              String    @id @default(cuid())
+  studentId       String    @map("student_id")
+  student         Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  month           String    // Format: YYYY-MM (e.g. 2026-09)
+  amountDue       Float     @map("amount_due")
+  baseAmount      Float?    @map("base_amount")
+  isProrated      Boolean   @default(false) @map("is_prorated")
+  prorationReason String?   @map("proration_reason")
+  amountPaid      Float     @default(0) @map("amount_paid")
+  status          String    @default("pending") // "paid" | "pending" | "partial"
+  paymentDate     DateTime? @map("payment_date")
+  paymentMethod   String?   @map("payment_method") // "UPI" | "Cash" | "Bank Transfer" | "Card" | "Other"
+  transactionRef  String?   @map("transaction_ref")
+  remarks         String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@unique([studentId, month])
+  @@index([month])
+  @@index([status])
+  @@map("fee_records")
 }

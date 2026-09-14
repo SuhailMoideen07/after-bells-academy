@@ -17,6 +17,9 @@ import type {
   Batch,
   ScheduleTemplate,
   TemplateDay,
+  FeeRecord,
+  FeeStatus,
+  MonthlyFeeSummary,
 } from '@/types/tms';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -32,6 +35,7 @@ export interface DatabaseSchema {
   classLogs: ClassLog[];
   notifications: NotificationItem[];
   scheduleTemplates: ScheduleTemplate[];
+  feeRecords: FeeRecord[];
 }
 
 export function hashPasswordSimple(password: string): string {
@@ -115,6 +119,7 @@ class JsonDatabaseManager {
         classLogs: [],
         notifications: [],
         scheduleTemplates: [],
+        feeRecords: [],
       };
       this.passwords = { 'usr_admin': hashPasswordSimple('Admin@AfterBells2026') };
       this.saveToFile(initial, this.passwords);
@@ -137,10 +142,11 @@ class JsonDatabaseManager {
         classLogs: parsed.classLogs || [],
         notifications: parsed.notifications || [],
         scheduleTemplates: parsed.scheduleTemplates || [],
+        feeRecords: parsed.feeRecords || [],
       };
     } catch (err) {
       console.error('Failed to parse academy_db.json fallback.', err);
-      return { users: [], teachers: [], students: [], subjects: DEFAULT_SUBJECTS, batches: DEFAULT_BATCHES, schedules: [], classLogs: [], notifications: [], scheduleTemplates: [] };
+      return { users: [], teachers: [], students: [], subjects: DEFAULT_SUBJECTS, batches: DEFAULT_BATCHES, schedules: [], classLogs: [], notifications: [], scheduleTemplates: [], feeRecords: [] };
     }
   }
 
@@ -605,6 +611,170 @@ class JsonDatabaseManager {
     // This is a best-effort cleanup for JSON mode.
     return 0; // JSON mode: no-op (admin can manually manage)
   }
+
+  // --- Fee Management Methods (JSON fallback) ---
+
+  public getFeeRecordsForMonth(month: string): { records: FeeRecord[]; summary: MonthlyFeeSummary } {
+    this.reloadDiskData();
+    if (!this.data.feeRecords) this.data.feeRecords = [];
+
+    const activeStudents = this.data.students.filter(s => s.status === 'active');
+    let hasAddedNew = false;
+
+    for (const student of activeStudents) {
+      const existing = this.data.feeRecords.find(r => r.student_id === student.id && r.month === month);
+      if (!existing) {
+        const baseFee = student.monthly_fee || 0;
+        this.data.feeRecords.push({
+          id: 'fee_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+          student_id: student.id,
+          student_name: student.name,
+          grade_class: student.grade_class,
+          board: student.board,
+          guardian_name: student.guardian_name,
+          phone: student.phone,
+          assigned_teacher_id: student.assigned_teacher_id,
+          assigned_teacher_name: student.assigned_teacher_name,
+          month,
+          amount_due: baseFee,
+          base_amount: baseFee,
+          is_prorated: false,
+          amount_paid: 0,
+          status: 'pending',
+          created_at: new Date().toISOString(),
+        });
+        hasAddedNew = true;
+      }
+    }
+
+    if (hasAddedNew) {
+      this.saveToFile();
+    }
+
+    const monthRecords = this.data.feeRecords
+      .filter(r => r.month === month)
+      .map(r => {
+        const student = this.data.students.find(s => s.id === r.student_id);
+        return {
+          ...r,
+          student_name: student?.name || r.student_name || 'Student',
+          grade_class: student?.grade_class || r.grade_class || '',
+          board: student?.board || r.board || '',
+          guardian_name: student?.guardian_name || r.guardian_name || '',
+          phone: student?.phone || r.phone || '',
+          assigned_teacher_name: student?.assigned_teacher_name || r.assigned_teacher_name || 'Unassigned',
+        };
+      })
+      .sort((a, b) => (a.student_name || '').localeCompare(b.student_name || ''));
+
+    const summary = this.computeFeeSummary(month, monthRecords);
+    return { records: monthRecords, summary };
+  }
+
+  public updateFeeRecord(id: string, updates: Partial<FeeRecord>): FeeRecord | undefined {
+    if (!this.data.feeRecords) return undefined;
+    const rec = this.data.feeRecords.find(r => r.id === id);
+    if (!rec) return undefined;
+    Object.assign(rec, updates, { updated_at: new Date().toISOString() });
+    if (updates.amount_paid !== undefined) {
+      if (rec.amount_paid >= rec.amount_due && rec.amount_due > 0) {
+        rec.status = 'paid';
+      } else if (rec.amount_paid > 0 && rec.amount_paid < rec.amount_due) {
+        rec.status = 'partial';
+      } else if (rec.amount_paid === 0) {
+        rec.status = 'pending';
+      }
+    }
+    this.saveToFile();
+    return rec;
+  }
+
+  public manuallyProrateFeeRecord(id: string, params: { proratedAmount: number; reason?: string }): FeeRecord | undefined {
+    if (!this.data.feeRecords) return undefined;
+    const rec = this.data.feeRecords.find(r => r.id === id);
+    if (!rec) return undefined;
+    if (rec.base_amount === undefined || rec.base_amount === null) {
+      rec.base_amount = rec.amount_due;
+    }
+    rec.amount_due = params.proratedAmount;
+    rec.is_prorated = true;
+    rec.proration_reason = params.reason || 'Manually prorated';
+    if (rec.amount_paid >= rec.amount_due && rec.amount_due > 0) {
+      rec.status = 'paid';
+    } else if (rec.amount_paid > 0 && rec.amount_paid < rec.amount_due) {
+      rec.status = 'partial';
+    } else {
+      rec.status = 'pending';
+    }
+    rec.updated_at = new Date().toISOString();
+    this.saveToFile();
+    return rec;
+  }
+
+  public resetProration(id: string): FeeRecord | undefined {
+    if (!this.data.feeRecords) return undefined;
+    const rec = this.data.feeRecords.find(r => r.id === id);
+    if (!rec) return undefined;
+    if (rec.base_amount !== undefined && rec.base_amount !== null) {
+      rec.amount_due = rec.base_amount;
+    }
+    rec.is_prorated = false;
+    rec.proration_reason = undefined;
+    if (rec.amount_paid >= rec.amount_due && rec.amount_due > 0) {
+      rec.status = 'paid';
+    } else if (rec.amount_paid > 0 && rec.amount_paid < rec.amount_due) {
+      rec.status = 'partial';
+    } else {
+      rec.status = 'pending';
+    }
+    rec.updated_at = new Date().toISOString();
+    this.saveToFile();
+    return rec;
+  }
+
+  public markFeeAsPaid(id: string, paymentMethod?: string, transactionRef?: string, remarks?: string): FeeRecord | undefined {
+    if (!this.data.feeRecords) return undefined;
+    const rec = this.data.feeRecords.find(r => r.id === id);
+    if (!rec) return undefined;
+    rec.amount_paid = rec.amount_due;
+    rec.status = 'paid';
+    rec.payment_date = new Date().toISOString();
+    if (paymentMethod) rec.payment_method = paymentMethod;
+    if (transactionRef) rec.transaction_ref = transactionRef;
+    if (remarks) rec.remarks = remarks;
+    rec.updated_at = new Date().toISOString();
+    this.saveToFile();
+    return rec;
+  }
+
+  private computeFeeSummary(month: string, records: FeeRecord[]): MonthlyFeeSummary {
+    const totalExpected = records.reduce((acc, r) => acc + (r.amount_due || 0), 0);
+    const totalReceived = records.reduce((acc, r) => acc + (r.amount_paid || 0), 0);
+    const totalPending = Math.max(0, totalExpected - totalReceived);
+    const collectionRate = totalExpected > 0 ? Math.round((totalReceived / totalExpected) * 100) : 0;
+    const paidCount = records.filter(r => r.status === 'paid').length;
+    const pendingCount = records.filter(r => r.status === 'pending').length;
+    const partialCount = records.filter(r => r.status === 'partial').length;
+    const proratedCount = records.filter(r => r.is_prorated).length;
+
+    return {
+      month,
+      totalExpected,
+      totalReceived,
+      totalPending,
+      collectionRate,
+      paidCount,
+      pendingCount,
+      partialCount,
+      proratedCount,
+      totalStudents: records.length,
+    };
+  }
+
+  public getMonthlyFeeSummary(month: string): MonthlyFeeSummary {
+    const { summary } = this.getFeeRecordsForMonth(month);
+    return summary;
+  }
 }
 
 const jsonDb = new JsonDatabaseManager();
@@ -862,6 +1032,8 @@ export const db = {
       assigned_teacher_id: s.assignedTeacherId || '',
       assigned_teacher_name: s.teacher ? s.teacher.name : 'Unassigned',
       subjects: s.subjects,
+      monthly_fee: s.monthlyFee || 0,
+      joining_date: s.joiningDate || undefined,
       status: s.status as any,
       created_at: s.createdAt.toISOString(),
     }));
@@ -883,6 +1055,8 @@ export const db = {
       assigned_teacher_id: s.assignedTeacherId || '',
       assigned_teacher_name: s.teacher ? s.teacher.name : 'Unassigned',
       subjects: s.subjects,
+      monthly_fee: s.monthlyFee || 0,
+      joining_date: s.joiningDate || undefined,
       status: s.status as any,
       created_at: s.createdAt.toISOString(),
     };
@@ -901,6 +1075,8 @@ export const db = {
       assigned_teacher_id: s.assignedTeacherId || '',
       assigned_teacher_name: 'Teacher',
       subjects: s.subjects,
+      monthly_fee: s.monthlyFee || 0,
+      joining_date: s.joiningDate || undefined,
       status: s.status as any,
       created_at: s.createdAt.toISOString(),
     }));
@@ -922,6 +1098,8 @@ export const db = {
         phone: params.phone,
         assignedTeacherId: params.assigned_teacher_id || null,
         subjects: params.subjects,
+        monthlyFee: params.monthly_fee || 0,
+        joiningDate: params.joining_date || null,
         status: params.status === 'disabled' ? Status.disabled : Status.active,
       },
     });
@@ -940,6 +1118,8 @@ export const db = {
       assigned_teacher_id: s.assignedTeacherId || '',
       assigned_teacher_name: teacher ? teacher.name : 'Unassigned',
       subjects: s.subjects,
+      monthly_fee: s.monthlyFee || 0,
+      joining_date: s.joiningDate || undefined,
       status: s.status as any,
       created_at: s.createdAt.toISOString(),
     };
@@ -968,6 +1148,8 @@ export const db = {
         ...(updates.phone && { phone: updates.phone }),
         ...(updates.assigned_teacher_id !== undefined && { assignedTeacherId: updates.assigned_teacher_id || null }),
         ...(updates.subjects && { subjects: updates.subjects }),
+        ...(updates.monthly_fee !== undefined && { monthlyFee: updates.monthly_fee }),
+        ...(updates.joining_date !== undefined && { joiningDate: updates.joining_date }),
         ...(updates.status && { status: updates.status === 'disabled' ? Status.disabled : Status.active }),
       },
       include: { teacher: true },
@@ -983,6 +1165,8 @@ export const db = {
       assigned_teacher_id: s.assignedTeacherId || '',
       assigned_teacher_name: s.teacher ? s.teacher.name : 'Unassigned',
       subjects: s.subjects,
+      monthly_fee: s.monthlyFee || 0,
+      joining_date: s.joiningDate || undefined,
       status: s.status as any,
       created_at: s.createdAt.toISOString(),
     };
@@ -1817,5 +2001,317 @@ export const db = {
     }
 
     return { created, skipped };
+  },
+
+  // --- Fee Management Async Methods ---
+
+  async getFeeRecordsForMonth(month: string): Promise<{ records: FeeRecord[]; summary: MonthlyFeeSummary }> {
+    if (!isPrismaEnabled()) return jsonDb.getFeeRecordsForMonth(month);
+
+    const activeStudents = await prisma.student.findMany({
+      where: { status: Status.active },
+      include: { teacher: true },
+      orderBy: { name: 'asc' },
+    });
+
+    const existingRecords = await prisma.feeRecord.findMany({
+      where: { month },
+      select: { studentId: true },
+    });
+    const existingStudentIds = new Set(existingRecords.map(r => r.studentId));
+
+    const missingRecords = activeStudents
+      .filter(s => !existingStudentIds.has(s.id))
+      .map(s => ({
+        studentId: s.id,
+        month,
+        amountDue: s.monthlyFee || 0,
+        baseAmount: s.monthlyFee || 0,
+        isProrated: false,
+        amountPaid: 0,
+        status: 'pending',
+      }));
+
+    if (missingRecords.length > 0) {
+      await prisma.feeRecord.createMany({
+        data: missingRecords,
+        skipDuplicates: true,
+      });
+    }
+
+    const allRecords = await prisma.feeRecord.findMany({
+      where: { month },
+      include: { student: { include: { teacher: true } } },
+      orderBy: { student: { name: 'asc' } },
+    });
+
+    const mapped: FeeRecord[] = allRecords.map(r => ({
+      id: r.id,
+      student_id: r.studentId,
+      student_name: r.student.name,
+      grade_class: r.student.gradeClass,
+      board: r.student.board,
+      guardian_name: r.student.guardianName,
+      phone: r.student.phone,
+      assigned_teacher_id: r.student.assignedTeacherId || undefined,
+      assigned_teacher_name: r.student.teacher ? r.student.teacher.name : 'Unassigned',
+      month: r.month,
+      amount_due: r.amountDue,
+      base_amount: r.baseAmount !== null ? r.baseAmount : (r.student.monthlyFee || 0),
+      is_prorated: r.isProrated,
+      proration_reason: r.prorationReason || undefined,
+      amount_paid: r.amountPaid,
+      status: r.status as FeeStatus,
+      payment_date: r.paymentDate ? r.paymentDate.toISOString() : undefined,
+      payment_method: r.paymentMethod || undefined,
+      transaction_ref: r.transactionRef || undefined,
+      remarks: r.remarks || undefined,
+      created_at: r.createdAt.toISOString(),
+      updated_at: r.updatedAt ? r.updatedAt.toISOString() : undefined,
+    }));
+
+    const totalExpected = mapped.reduce((acc, r) => acc + (r.amount_due || 0), 0);
+    const totalReceived = mapped.reduce((acc, r) => acc + (r.amount_paid || 0), 0);
+    const totalPending = Math.max(0, totalExpected - totalReceived);
+    const collectionRate = totalExpected > 0 ? Math.round((totalReceived / totalExpected) * 100) : 0;
+    const paidCount = mapped.filter(r => r.status === 'paid').length;
+    const pendingCount = mapped.filter(r => r.status === 'pending').length;
+    const partialCount = mapped.filter(r => r.status === 'partial').length;
+    const proratedCount = mapped.filter(r => r.is_prorated).length;
+
+    const summary: MonthlyFeeSummary = {
+      month,
+      totalExpected,
+      totalReceived,
+      totalPending,
+      collectionRate,
+      paidCount,
+      pendingCount,
+      partialCount,
+      proratedCount,
+      totalStudents: mapped.length,
+    };
+
+    return { records: mapped, summary };
+  },
+
+  async updateFeeRecord(id: string, updates: Partial<FeeRecord>): Promise<FeeRecord | undefined> {
+    if (!isPrismaEnabled()) return jsonDb.updateFeeRecord(id, updates);
+    const current = await prisma.feeRecord.findUnique({
+      where: { id },
+      include: { student: { include: { teacher: true } } },
+    });
+    if (!current) return undefined;
+
+    const amountPaid = updates.amount_paid !== undefined ? updates.amount_paid : current.amountPaid;
+    const amountDue = updates.amount_due !== undefined ? updates.amount_due : current.amountDue;
+    let status = updates.status || current.status;
+    if (updates.amount_paid !== undefined && !updates.status) {
+      if (amountPaid >= amountDue && amountDue > 0) status = 'paid';
+      else if (amountPaid > 0 && amountPaid < amountDue) status = 'partial';
+      else if (amountPaid === 0) status = 'pending';
+    }
+
+    const r = await prisma.feeRecord.update({
+      where: { id },
+      data: {
+        ...(updates.amount_due !== undefined && { amountDue: updates.amount_due }),
+        ...(updates.amount_paid !== undefined && { amountPaid: updates.amount_paid }),
+        status,
+        ...(updates.payment_date !== undefined && { paymentDate: updates.payment_date ? new Date(updates.payment_date) : null }),
+        ...(updates.payment_method !== undefined && { paymentMethod: updates.payment_method }),
+        ...(updates.transaction_ref !== undefined && { transactionRef: updates.transaction_ref }),
+        ...(updates.remarks !== undefined && { remarks: updates.remarks }),
+      },
+      include: { student: { include: { teacher: true } } },
+    });
+
+    return {
+      id: r.id,
+      student_id: r.studentId,
+      student_name: r.student.name,
+      grade_class: r.student.gradeClass,
+      board: r.student.board,
+      guardian_name: r.student.guardianName,
+      phone: r.student.phone,
+      assigned_teacher_id: r.student.assignedTeacherId || undefined,
+      assigned_teacher_name: r.student.teacher ? r.student.teacher.name : 'Unassigned',
+      month: r.month,
+      amount_due: r.amountDue,
+      base_amount: r.baseAmount !== null ? r.baseAmount : (r.student.monthlyFee || 0),
+      is_prorated: r.isProrated,
+      proration_reason: r.prorationReason || undefined,
+      amount_paid: r.amountPaid,
+      status: r.status as FeeStatus,
+      payment_date: r.paymentDate ? r.paymentDate.toISOString() : undefined,
+      payment_method: r.paymentMethod || undefined,
+      transaction_ref: r.transactionRef || undefined,
+      remarks: r.remarks || undefined,
+      created_at: r.createdAt.toISOString(),
+      updated_at: r.updatedAt ? r.updatedAt.toISOString() : undefined,
+    };
+  },
+
+  async manuallyProrateFeeRecord(id: string, params: { proratedAmount: number; reason?: string }): Promise<FeeRecord | undefined> {
+    if (!isPrismaEnabled()) return jsonDb.manuallyProrateFeeRecord(id, params);
+    const current = await prisma.feeRecord.findUnique({
+      where: { id },
+      include: { student: { include: { teacher: true } } },
+    });
+    if (!current) return undefined;
+
+    const baseAmount = current.baseAmount !== null ? current.baseAmount : current.amountDue;
+    let status = current.status;
+    if (current.amountPaid >= params.proratedAmount && params.proratedAmount > 0) {
+      status = 'paid';
+    } else if (current.amountPaid > 0 && current.amountPaid < params.proratedAmount) {
+      status = 'partial';
+    } else {
+      status = 'pending';
+    }
+
+    const r = await prisma.feeRecord.update({
+      where: { id },
+      data: {
+        amountDue: params.proratedAmount,
+        baseAmount,
+        isProrated: true,
+        prorationReason: params.reason || 'Manually prorated',
+        status,
+      },
+      include: { student: { include: { teacher: true } } },
+    });
+
+    return {
+      id: r.id,
+      student_id: r.studentId,
+      student_name: r.student.name,
+      grade_class: r.student.gradeClass,
+      board: r.student.board,
+      guardian_name: r.student.guardianName,
+      phone: r.student.phone,
+      assigned_teacher_id: r.student.assignedTeacherId || undefined,
+      assigned_teacher_name: r.student.teacher ? r.student.teacher.name : 'Unassigned',
+      month: r.month,
+      amount_due: r.amountDue,
+      base_amount: r.baseAmount !== null ? r.baseAmount : (r.student.monthlyFee || 0),
+      is_prorated: r.isProrated,
+      proration_reason: r.prorationReason || undefined,
+      amount_paid: r.amountPaid,
+      status: r.status as FeeStatus,
+      payment_date: r.paymentDate ? r.paymentDate.toISOString() : undefined,
+      payment_method: r.paymentMethod || undefined,
+      transaction_ref: r.transactionRef || undefined,
+      remarks: r.remarks || undefined,
+      created_at: r.createdAt.toISOString(),
+      updated_at: r.updatedAt ? r.updatedAt.toISOString() : undefined,
+    };
+  },
+
+  async resetProration(id: string): Promise<FeeRecord | undefined> {
+    if (!isPrismaEnabled()) return jsonDb.resetProration(id);
+    const current = await prisma.feeRecord.findUnique({
+      where: { id },
+      include: { student: { include: { teacher: true } } },
+    });
+    if (!current) return undefined;
+
+    const restoredAmount = current.baseAmount !== null ? current.baseAmount : (current.student.monthlyFee || 0);
+    let status = current.status;
+    if (current.amountPaid >= restoredAmount && restoredAmount > 0) {
+      status = 'paid';
+    } else if (current.amountPaid > 0 && current.amountPaid < restoredAmount) {
+      status = 'partial';
+    } else {
+      status = 'pending';
+    }
+
+    const r = await prisma.feeRecord.update({
+      where: { id },
+      data: {
+        amountDue: restoredAmount,
+        isProrated: false,
+        prorationReason: null,
+        status,
+      },
+      include: { student: { include: { teacher: true } } },
+    });
+
+    return {
+      id: r.id,
+      student_id: r.studentId,
+      student_name: r.student.name,
+      grade_class: r.student.gradeClass,
+      board: r.student.board,
+      guardian_name: r.student.guardianName,
+      phone: r.student.phone,
+      assigned_teacher_id: r.student.assignedTeacherId || undefined,
+      assigned_teacher_name: r.student.teacher ? r.student.teacher.name : 'Unassigned',
+      month: r.month,
+      amount_due: r.amountDue,
+      base_amount: r.baseAmount !== null ? r.baseAmount : (r.student.monthlyFee || 0),
+      is_prorated: r.isProrated,
+      proration_reason: r.prorationReason || undefined,
+      amount_paid: r.amountPaid,
+      status: r.status as FeeStatus,
+      payment_date: r.paymentDate ? r.paymentDate.toISOString() : undefined,
+      payment_method: r.paymentMethod || undefined,
+      transaction_ref: r.transactionRef || undefined,
+      remarks: r.remarks || undefined,
+      created_at: r.createdAt.toISOString(),
+      updated_at: r.updatedAt ? r.updatedAt.toISOString() : undefined,
+    };
+  },
+
+  async markFeeAsPaid(id: string, paymentMethod?: string, transactionRef?: string, remarks?: string): Promise<FeeRecord | undefined> {
+    if (!isPrismaEnabled()) return jsonDb.markFeeAsPaid(id, paymentMethod, transactionRef, remarks);
+    const current = await prisma.feeRecord.findUnique({
+      where: { id },
+      include: { student: { include: { teacher: true } } },
+    });
+    if (!current) return undefined;
+
+    const r = await prisma.feeRecord.update({
+      where: { id },
+      data: {
+        amountPaid: current.amountDue,
+        status: 'paid',
+        paymentDate: new Date(),
+        ...(paymentMethod && { paymentMethod }),
+        ...(transactionRef && { transactionRef }),
+        ...(remarks && { remarks }),
+      },
+      include: { student: { include: { teacher: true } } },
+    });
+
+    return {
+      id: r.id,
+      student_id: r.studentId,
+      student_name: r.student.name,
+      grade_class: r.student.gradeClass,
+      board: r.student.board,
+      guardian_name: r.student.guardianName,
+      phone: r.student.phone,
+      assigned_teacher_id: r.student.assignedTeacherId || undefined,
+      assigned_teacher_name: r.student.teacher ? r.student.teacher.name : 'Unassigned',
+      month: r.month,
+      amount_due: r.amountDue,
+      base_amount: r.baseAmount !== null ? r.baseAmount : (r.student.monthlyFee || 0),
+      is_prorated: r.isProrated,
+      proration_reason: r.prorationReason || undefined,
+      amount_paid: r.amountPaid,
+      status: r.status as FeeStatus,
+      payment_date: r.paymentDate ? r.paymentDate.toISOString() : undefined,
+      payment_method: r.paymentMethod || undefined,
+      transaction_ref: r.transactionRef || undefined,
+      remarks: r.remarks || undefined,
+      created_at: r.createdAt.toISOString(),
+      updated_at: r.updatedAt ? r.updatedAt.toISOString() : undefined,
+    };
+  },
+
+  async getMonthlyFeeSummary(month: string): Promise<MonthlyFeeSummary> {
+    const { summary } = await this.getFeeRecordsForMonth(month);
+    return summary;
   },
 };

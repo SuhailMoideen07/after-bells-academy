@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Download, Printer, BarChart3, FileSpreadsheet, Users, GraduationCap, Calendar, Sparkles } from 'lucide-react';
+import { Download, Printer, BarChart3, FileSpreadsheet, Users, GraduationCap, Calendar, Sparkles, CreditCard } from 'lucide-react';
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -23,7 +23,7 @@ function generateMonthOptions(): { value: string; label: string }[] {
 }
 
 export default function ReportsPage() {
-  const [reportType, setReportType] = useState<'teacher' | 'student' | 'monthly'>('teacher');
+  const [reportType, setReportType] = useState<'teacher' | 'student' | 'monthly' | 'fees'>('teacher');
   const [reportData, setReportData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState('');
@@ -69,7 +69,7 @@ export default function ReportsPage() {
         <div>
           <h1 className="text-2xl font-black text-navy-primary tracking-tight">Academy Reports & Export</h1>
           <p className="text-xs text-slate-500 mt-1">
-            Generate faculty performance metrics, student attendance summaries, and monthly hours for payroll.
+            Generate faculty performance metrics, student attendance summaries, fee collections, and monthly payroll hours.
           </p>
         </div>
 
@@ -91,26 +91,34 @@ export default function ReportsPage() {
 
       {/* MONTH PERIOD FILTER + REPORT TYPE TABS */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 print:hidden">
-        <div className="flex items-center gap-2 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm flex-1">
+        <div className="flex items-center gap-2 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm flex-1 overflow-x-auto">
           <button
             onClick={() => setReportType('teacher')}
-            className={`flex-1 py-2.5 px-4 text-xs font-extrabold rounded-xl transition-all flex items-center justify-center gap-2 ${
+            className={`flex-1 py-2.5 px-3 text-xs font-extrabold rounded-xl whitespace-nowrap transition-all flex items-center justify-center gap-1.5 ${
               reportType === 'teacher' ? 'bg-gold-accent text-navy-dark shadow-md' : 'text-slate-600 hover:bg-slate-50'
             }`}
           >
-            <Users className="w-4 h-4" /> Teacher-wise
+            <Users className="w-4 h-4" /> Faculty
           </button>
           <button
             onClick={() => setReportType('student')}
-            className={`flex-1 py-2.5 px-4 text-xs font-extrabold rounded-xl transition-all flex items-center justify-center gap-2 ${
+            className={`flex-1 py-2.5 px-3 text-xs font-extrabold rounded-xl whitespace-nowrap transition-all flex items-center justify-center gap-1.5 ${
               reportType === 'student' ? 'bg-gold-accent text-navy-dark shadow-md' : 'text-slate-600 hover:bg-slate-50'
             }`}
           >
-            <GraduationCap className="w-4 h-4" /> Student-wise
+            <GraduationCap className="w-4 h-4" /> Students
+          </button>
+          <button
+            onClick={() => setReportType('fees')}
+            className={`flex-1 py-2.5 px-3 text-xs font-extrabold rounded-xl whitespace-nowrap transition-all flex items-center justify-center gap-1.5 ${
+              reportType === 'fees' ? 'bg-gold-accent text-navy-dark shadow-md' : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            <CreditCard className="w-4 h-4" /> Fees Collection
           </button>
           <button
             onClick={() => setReportType('monthly')}
-            className={`flex-1 py-2.5 px-4 text-xs font-extrabold rounded-xl transition-all flex items-center justify-center gap-2 ${
+            className={`flex-1 py-2.5 px-3 text-xs font-extrabold rounded-xl whitespace-nowrap transition-all flex items-center justify-center gap-1.5 ${
               reportType === 'monthly' ? 'bg-gold-accent text-navy-dark shadow-md' : 'text-slate-600 hover:bg-slate-50'
             }`}
           >
@@ -225,6 +233,56 @@ export default function ReportsPage() {
                       <td className="p-3.5 font-bold text-emerald-600">{row.completed}</td>
                       <td className="p-3.5 font-bold text-red-500">{row.cancelled}</td>
                       <td className="p-3.5 font-extrabold text-navy-primary text-right">{row.totalHours} hrs</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {reportType === 'fees' && (
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-100 uppercase tracking-wider text-slate-600 font-bold border-b border-slate-200">
+                  <tr>
+                    <th className="p-3.5">Student</th>
+                    <th className="p-3.5">Faculty</th>
+                    <th className="p-3.5">Billing Month</th>
+                    <th className="p-3.5">Amount Due</th>
+                    <th className="p-3.5">Amount Paid</th>
+                    <th className="p-3.5">Status</th>
+                    <th className="p-3.5">Payment Details</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {reportData.map((row: any) => (
+                    <tr key={row.id} className="hover:bg-slate-50">
+                      <td className="p-3.5">
+                        <span className="font-extrabold text-navy-primary block">{row.student_name}</span>
+                        <span className="text-[10px] text-slate-500">{row.board} • {row.grade_class}</span>
+                      </td>
+                      <td className="p-3.5 text-slate-700 font-bold">{row.assigned_teacher_name || 'Unassigned'}</td>
+                      <td className="p-3.5 text-slate-600 font-semibold">{row.month}</td>
+                      <td className="p-3.5 font-bold text-slate-800">
+                        ₹ {row.amount_due?.toLocaleString('en-IN')}
+                        {row.is_prorated && (
+                          <span className="block text-[10px] text-purple-600 font-medium">
+                            ✂️ Prorated (Base: ₹{row.base_amount})
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-3.5 font-extrabold text-emerald-600">
+                        ₹ {row.amount_paid?.toLocaleString('en-IN')}
+                      </td>
+                      <td className="p-3.5">
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                          row.status === 'paid' ? 'bg-emerald-100 text-emerald-800' :
+                          row.status === 'partial' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {row.status}
+                        </span>
+                      </td>
+                      <td className="p-3.5 text-slate-600 text-[11px]">
+                        {row.payment_method ? `${row.payment_method} ${row.payment_date ? `(${row.payment_date.split('T')[0]})` : ''}` : '-'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

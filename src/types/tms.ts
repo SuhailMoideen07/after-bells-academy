@@ -34,6 +34,8 @@ export interface Student {
   assigned_teacher_id: string;
   assigned_teacher_name?: string;
   subjects: string[];
+  monthly_fee?: number;
+  joining_date?: string;
   status: UserStatus;
   created_at: string;
 }
@@ -147,4 +149,44 @@ export interface ScheduleTemplate {
   created_at: string;
   last_generated_at?: string;
   last_generated_count?: number;
+}
+
+export type FeeStatus = 'paid' | 'pending' | 'partial';
+
+export interface FeeRecord {
+  id: string;
+  student_id: string;
+  student_name?: string;
+  grade_class?: string;
+  board?: string;
+  guardian_name?: string;
+  phone?: string;
+  assigned_teacher_id?: string;
+  assigned_teacher_name?: string;
+  month: string; // YYYY-MM
+  amount_due: number;
+  base_amount?: number;
+  is_prorated?: boolean;
+  proration_reason?: string;
+  amount_paid: number;
+  status: FeeStatus;
+  payment_date?: string;
+  payment_method?: string;
+  transaction_ref?: string;
+  remarks?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface MonthlyFeeSummary {
+  month: string; // YYYY-MM
+  totalExpected: number;
+  totalReceived: number;
+  totalPending: number;
+  collectionRate: number; // 0 to 100
+  paidCount: number;
+  pendingCount: number;
+  partialCount: number;
+  proratedCount: number;
+  totalStudents: number;
 }
